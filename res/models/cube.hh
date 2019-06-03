@@ -1,24 +1,28 @@
 #pragma once
 
-// A very simple cube model for testing indexed 3D graphics
-//
-//  7 + + + + + + + + + 6
-//  +\                  +\
-//  + \                 + \
-//  +  \                +  \
-//  +   \               +   \
-//  +    3 + + + + + + +++ + 2
-//  +    +              +    +
-//  +    +              +    +
-//  +    +              +    +
-//  +    +              +    +
-//  4 + +++ + + + + + + 5    +
-//   \   +               \   +
-//    \  +                \  +
-//     \ +                 \ +
-//      \+                  \+
-//       0 + + + + + + + + + 1
-//  
+/*
+
+A very simple cube model for testing indexed 3D graphics
+
+  7 + + + + + + + + + 6
+  +\                  +\
+  + \                 + \
+  +  \                +  \
+  +   \               +   \
+  +    3 + + + + + + +++ + 2
+  +    +              +    +
+  +    +              +    +
+  +    +              +    +
+  +    +              +    +
+  4 + +++ + + + + + + 5    +
+   \   +               \   +
+    \  +                \  +
+     \ +                 \ +
+      \+                  \+
+       0 + + + + + + + + + 1
+
+*/
+  
 
 namespace Cube {
 	typedef unsigned int u32;

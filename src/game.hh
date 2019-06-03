@@ -9,10 +9,10 @@ using namespace glm;
 
 struct Camera {
 	// rot.x: pitch, rot.y: yaw, rot.z: roll (roll not implemented)
-	vec3 pos, rot, front, right, up, world;
+	vec3 pos, rot, front, up, right, world;
 
 	Camera(vec3 pos, vec3 rot, vec3 front = vec3(0, 0, -1), vec3 up = vec3(0, 1, 0)):
-			pos(pos), front(front), up(up), rot(rot) {
+			pos(pos), rot(rot), front(front), up(up) {
 		world = vec3(0, 1, 0);
 		update();
 	}
@@ -74,7 +74,7 @@ struct Sky {
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, tex);
 		glBindVertexArray(vao);
-		//glDisable(GL_BLEND);
+		glDisable(GL_BLEND);
 		glDepthMask(false);
 
 		mat4 M(1.0);
@@ -121,6 +121,8 @@ struct ColorCube {
 		// index buffer
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo[2]);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Cube::index), Cube::index, GL_STATIC_DRAW);
+
+		glBindVertexArray(0);
 	}
 
 	void draw(mat4 P, mat4 V) {

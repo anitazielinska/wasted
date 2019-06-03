@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+#include <cstdio>
 
 #include <GL/glew.h>
 
@@ -55,8 +56,17 @@ struct ShaderProgram {
 
 	ShaderProgram(u32 id = 0): id(id) {};
 	ShaderProgram(std::vector<Shader*> shaders);
-	~ShaderProgram() { glDeleteProgram(id); };
-	ShaderProgram& operator=(ShaderProgram &&other) { std::swap(id, other.id); return *this; };
+
+	~ShaderProgram() {
+		glDeleteProgram(id);
+		fprintf(stderr, "deleting shader program %u\n", id);
+	};
+
+	ShaderProgram& operator=(ShaderProgram &&other) {
+		std::swap(id, other.id);
+		return *this;
+	};
+
 	ShaderProgram& operator=(const ShaderProgram& other) = delete;
 
 	u32 u(const char *name) { return glGetUniformLocation(id, name); };

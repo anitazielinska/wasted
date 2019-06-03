@@ -59,14 +59,14 @@ void onUpdate(f32 dt) {
 	centerMouse();
 
 	if (mouseLocked) {
-		f64 drx = mouseSpeed * (windowWidth / 2.0 - xpos);
-		f64 dry = mouseSpeed * (windowHeight / 2.0 - ypos);
-		camera.offsetPitch(dry);
-		camera.offsetYaw(drx);
+		f64 drx = mouseSpeed * (windowHeight / 2.0 - ypos);
+		f64 dry = mouseSpeed * (windowWidth / 2.0 - xpos);
+		camera.offsetPitch(drx);
+		camera.offsetYaw(dry);
 	}
 
 	{
-		f32 dx, dy, dz;
+		f32 dx = 0, dy = 0, dz = 0;
 		if (glfwGetKey(window, KEY_DIR_U) == GLFW_PRESS) dz += dt * movementSpeed;
 		if (glfwGetKey(window, KEY_DIR_D) == GLFW_PRESS) dz -= dt * movementSpeed;
 		if (glfwGetKey(window, KEY_DIR_R) == GLFW_PRESS) dx += dt * movementSpeed;
@@ -89,7 +89,6 @@ void onDraw() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	sky.draw(P, V, camera.pos);
 	cube.draw(P, V);
-	glBindVertexArray(0);
 	glfwSwapBuffers(window);
 }
 
@@ -151,7 +150,6 @@ int main(void) {
 
 	cube.load();
 	sky.load();
-	glBindVertexArray(0);
 
 	glfwSetTime(0);
 	while (!glfwWindowShouldClose(window)) {

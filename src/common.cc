@@ -22,7 +22,7 @@ u32 loadTexture(const char *path) {
 	u8 *data;
 	u32 width, height;
 	lodepng_decode32_file(&data, &width, &height, path);
-	if (!data) fprintf(stderr, "error %u: could not read image '%s'\n", path);
+	if (!data) fprintf(stderr, "error: could not read image '%s'\n", path);
 
 	/*
 	u8 *temp = new u8[width * 4];
