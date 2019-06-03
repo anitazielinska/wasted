@@ -7,7 +7,7 @@ Drinking simulator, written in modern OpenGL.
 GL, GLFW, GLEW and GLM must be installed
 
 ```
-make && out/game
+make run
 ```
 
 ## Authors
