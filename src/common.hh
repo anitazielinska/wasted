@@ -58,8 +58,10 @@ struct ShaderProgram {
 	ShaderProgram(std::vector<Shader*> shaders);
 
 	~ShaderProgram() {
-		glDeleteProgram(id);
-		fprintf(stderr, "deleting shader program %u\n", id);
+		if (id) {
+			glDeleteProgram(id);
+			fprintf(stderr, "info: deleting shader program %u\n", id);
+		}
 	};
 
 	ShaderProgram& operator=(ShaderProgram &&other) {

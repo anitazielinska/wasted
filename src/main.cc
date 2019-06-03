@@ -17,6 +17,9 @@ bool mouseLocked = false;
 f32 mouseSpeed = 0.001;
 f32 mouseWheel = 0.0;
 
+bool flyingEnabled = false;
+f32 playerHeight = 0;
+
 u32 KEY_DIR_U = GLFW_KEY_W;
 u32 KEY_DIR_L = GLFW_KEY_A;
 u32 KEY_DIR_D = GLFW_KEY_S;
@@ -51,7 +54,16 @@ void lockMouse() {
 	centerMouse();
 }
 
+void toggleFlying() {
+	flyingEnabled = !flyingEnabled;
+	if (flyingEnabled)
+		fprintf(stderr, "info: flying enabled\n");
+	else
+		fprintf(stderr, "info: flying disabled\n");
+}
+
 // --------------------------------------
+
 
 void onUpdate(f32 dt) {
 	f64 xpos, ypos;
@@ -75,7 +87,11 @@ void onUpdate(f32 dt) {
 		if (glfwGetKey(window, KEY_FLY_D) == GLFW_PRESS) dy -= dt * movementSpeed;
 		camera.offsetRight(dx);
 		camera.offsetFront(dz);
-		camera.offsetUp(dy);
+		//camera.offsetUp(dy);
+		if (flyingEnabled) {
+			playerHeight += dy;
+		}
+		camera.pos.y = playerHeight;
 	}
 
 	f32 FoV = initialFoV - 5 * mouseWheel;
@@ -115,6 +131,7 @@ void onMouseClick(Window *window, i32 button, i32 action, i32 mods) {
 void onKeyboard(Window *window, i32 key, i32 code, i32 action, i32 mods) {
 	if (action == GLFW_PRESS) {
 		if (key == GLFW_KEY_ESCAPE) unlockMouse();
+		if (key == GLFW_KEY_M) toggleFlying();
 	}
 }
 
