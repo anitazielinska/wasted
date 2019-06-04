@@ -1,7 +1,4 @@
-#include "common.hh"
-
-#include <cstdio>
-#include <sstream>
+#include "engine.hh"
 
 #include <lodepng/lodepng.h>
 #include <assimp/Importer.hpp>
@@ -11,36 +8,14 @@
 using namespace std;
 using namespace glm;
 
-f64 clip(f64 value, f64 min, f64 max) {
-	value = value < min ? min : value;
-	value = value > max ? max : value;
-	return value;
-}
-
-f64 rad(f64 deg) {
-	return deg * PI / 180.0;
-}
-
-bool loadAssImp(
-	const char * path, 
+void loadAssImpMesh(
+	const aiMesh *mesh,
 	vector<u32> &indices,
 	vector<vec3> &vertices,
 	vector<vec3> &normals,
 	vector<vec2> &uvs
 ){
-
-	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile(path, aiProcess_FlipUVs);
-
-	if (!scene) {
-		fprintf(stderr, "error: assimp error '%s'\n", importer.GetErrorString());
-		return false;
-	}
-
-	// Assume one mesh
-	const aiMesh *mesh = scene->mMeshes[0];
 	const u32 vertexCount = mesh->mNumVertices;
-
 	vertices.resize(vertexCount);
 	normals.resize(vertexCount);
 	uvs.resize(vertexCount);
@@ -63,6 +38,27 @@ bool loadAssImp(
 			indices.push_back(face.mIndices[j]);
 		}
 	}
+}
+
+bool loadAssImp(
+	const char * path, 
+	vector<u32> &indices,
+	vector<vec3> &vertices,
+	vector<vec3> &normals,
+	vector<vec2> &uvs
+){
+
+	Assimp::Importer importer;
+	const aiScene* scene = importer.ReadFile(path, aiProcess_FlipUVs);
+
+	if (!scene) {
+		fprintf(stderr, "error: assimp error '%s'\n", importer.GetErrorString());
+		return false;
+	}
+
+	// Assume one mesh
+	const aiMesh *mesh = scene->mMeshes[0];
+	loadAssImpMesh(mesh, indices, vertices, normals, uvs);
 	
 	return true;
 }
@@ -96,7 +92,6 @@ PNG loadPNG(string path) {
 }
 
 u32 loadTexture(string path) {
-
 	u32 id;
 	glGenTextures(1, &id);
 	glBindTexture(GL_TEXTURE_2D, id);
@@ -127,7 +122,7 @@ u32 loadCubemap(vector<string> faces) {
 		if (!png.data) return 0;
 		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA,
 				png.width, png.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, png.data);
-		//delete[] png.data;
+		delete[] png.data;
 	}
 
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -137,24 +132,6 @@ u32 loadCubemap(vector<string> faces) {
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
 	return id;
-}
-
-bool readFile(const char *path, string &data) {
-	ifstream file(path, ios::in);
-	if (!file.is_open()) {
-		fprintf(stderr, "error: couldn't open file '%s'\n", path);
-		return false;
-	}
-	stringstream stream;
-	stream << file.rdbuf();
-	file.close();
-	data = stream.str();
-	return true;
-}
-
-void fatalError(const char *message) {
-	fprintf(stderr, "fatal error: %s\n", message);
-	exit(1);
 }
 
 i32 checkShaderStatus(u32 id) {
@@ -171,8 +148,8 @@ i32 checkShaderStatus(u32 id) {
 	return result;
 }
 
-Shader::Shader(const char *path, i32 type) {
-	fprintf(stderr, "info: compiling shader '%s'\n", path);
+Shader::Shader(string path, i32 type) {
+	fprintf(stderr, "info: compiling shader '%s'\n", path.c_str());
 
 	string code;
 	if (!readFile(path, code)) return;

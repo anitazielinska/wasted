@@ -1,10 +1,8 @@
-#include "common.hh"
+#include "util.hh"
 #include "game.hh"
 
-#include <cstdio>
-
-using namespace glm;
 using namespace std;
+using namespace glm;
 
 i32 windowWidth = 1024, windowHeight = 720;
 f32 aspectRatio = (f32) windowWidth / windowHeight;
@@ -31,9 +29,9 @@ Camera camera(vec3(0, 0, 5), vec3(0, -PI, 0));
 ColorCube cube;
 Sky sky;
 
-mat4 P, V, M;
+mat4 P, V;
 
-// --------------------------------------
+// ----------------------------------------------------------------------------
 
 void centerMouse() {
 	if (mouseLocked) {
@@ -61,9 +59,6 @@ void toggleFlying() {
 	else
 		fprintf(stderr, "info: flying disabled\n");
 }
-
-// --------------------------------------
-
 
 void onUpdate(f32 dt) {
 	f64 xpos, ypos;
@@ -99,7 +94,7 @@ void onUpdate(f32 dt) {
 	V = camera.lookAt();
 }
 
-// --------------------------------------
+// ----------------------------------------------------------------------------
 
 void onInit() {
 	glClearColor(0.0, 0.0, 0.4, 0.0);
