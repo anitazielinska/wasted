@@ -17,7 +17,7 @@ bool mouseLocked = false;
 f32 mouseSpeed = 0.001;
 f32 mouseWheel = 0.0;
 
-bool flyingEnabled = false;
+bool flyingEnabled = true;
 f32 playerHeight = 0;
 
 u32 KEY_DIR_U = GLFW_KEY_W;
@@ -101,11 +101,26 @@ void onUpdate(f32 dt) {
 
 // --------------------------------------
 
+void onInit() {
+	glClearColor(0.0, 0.0, 0.4, 0.0);
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_CULL_FACE);
+	glDepthFunc(GL_LESS);
+
+	cube.load();
+	sky.load();
+	glBindVertexArray(0);
+}
+
 void onDraw() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	sky.draw(P, V, camera.pos);
 	cube.draw(P, V);
 	glfwSwapBuffers(window);
+}
+
+void onExit() {
+
 }
 
 void onResize(Window *window, i32 width, i32 height) {
@@ -160,14 +175,7 @@ int main(void) {
 	glewExperimental = true;
 	if (glewInit() != GLEW_OK) fatalError("failed to init GLEW");
 
-	glClearColor(0.0, 0.0, 0.4, 0.0);
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_CULL_FACE);
-	glDepthFunc(GL_LESS);
-
-	cube.load();
-	sky.load();
-
+	onInit();
 	glfwSetTime(0);
 	while (!glfwWindowShouldClose(window)) {
 		f32 dt = glfwGetTime();
@@ -177,6 +185,7 @@ int main(void) {
 		glfwPollEvents();
 	}
 
+	onExit();
 	glfwTerminate();
 	exit(0);
 }

@@ -3,9 +3,14 @@
 #include "common.hh"
 #include "res/models/cube.hh"
 
-#include "glmmodel/glmmodel.h"
+#define sizeof_val(X) (sizeof(X[0]))
+#define sizeof_vec(X) (sizeof(X[0]) * X.size())
 
 using namespace glm;
+
+// move things to the .cc file
+#include <vector>
+using namespace std;
 
 struct Camera {
 	// rot.x: pitch, rot.y: yaw, rot.z: roll (roll not implemented)
@@ -44,26 +49,49 @@ struct Camera {
 
 struct Sky {
 	ShaderProgram shader;
-	u32 vao, vbo[3], tex;
+	u32 vao, vbo[4], tex;
 	i32 vertexCount;
+	i32 indexCount;
 
 	void load() {
-		const char *obj_path = "res/models/sky.obj";
-		const char *png_path = "res/images/sky.png";
+		// -- load model
+		vector<vec3> vertices, normals;
+		vector<vec2> texCoords;
+		vector<u32> indices;
+		loadAssImp("res/models/skydome.obj", indices, vertices, normals, texCoords);
+		indexCount = indices.size();
+		//fprintf(stderr, "sky: did build arrays (v=%lu, n=%lu, t=%lu, i=%d)\n", vertices.size(), normals.size(), texCoords.size(), indexCount);
 
-		GLMmodel *model = glmReadOBJ((char*)obj_path); 
-		if (!model) fprintf(stderr, "error: model not found '%s'\n", obj_path);
-		glmScale(model, 1);
-		glGenVertexArrays(1, &vao);
-		glBindVertexArray(vao);
-		glGenBuffers(3, vbo);
-		glmBuildVBO(model, &vertexCount, &vao, vbo);
+		// -- load texture
+		tex = loadTexture("res/images/skydome.png");
 
-		tex = loadTexture(png_path);
-
+		// -- load shader
 		Shader vs("res/shaders/sky_v.glsl", GL_VERTEX_SHADER);
 		Shader fs("res/shaders/sky_f.glsl", GL_FRAGMENT_SHADER);
 		shader = ShaderProgram({ &vs, &fs });
+
+		// -- send attributes
+		glGenVertexArrays(1, &vao);
+		glGenBuffers(4, vbo);
+		glBindVertexArray(vao);
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+		glBufferData(GL_ARRAY_BUFFER, sizeof_vec(vertices), vertices.data(), GL_STATIC_DRAW);
+		glVertexAttribPointer(shader.a("a_Vertex"), 3, GL_FLOAT, false, 0, 0);
+		glEnableVertexAttribArray(shader.a("a_Vertex"));
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+		glBufferData(GL_ARRAY_BUFFER, sizeof_vec(normals), normals.data(), GL_STATIC_DRAW);
+		glVertexAttribPointer(shader.a("a_Normal"), 3, GL_FLOAT, false, 0, 0);
+		glEnableVertexAttribArray(shader.a("a_Normal"));
+
+		glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+		glBufferData(GL_ARRAY_BUFFER, sizeof_vec(texCoords), texCoords.data(), GL_STATIC_DRAW);
+		glVertexAttribPointer(shader.a("a_TexCoord"), 2, GL_FLOAT, false, 0, 0);
+		glEnableVertexAttribArray(shader.a("a_TexCoord"));
+
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo[3]);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof_vec(indices), indices.data(), GL_STATIC_DRAW);
 	}
 
 	void draw(mat4 P, mat4 V, vec3 origin) {
@@ -73,19 +101,16 @@ struct Sky {
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, tex);
+		glUniform1i(shader.u("u_Texture"), 0);
+
 		glBindVertexArray(vao);
-		glDisable(GL_BLEND);
 		glDepthMask(false);
 
 		mat4 M(1.0);
-		M = translate(M, origin);
-		M = scale(M, vec3(100000));
+		M = translate(M, origin + vec3(0, -2000, 0));
+		M = scale(M, vec3(10000));
 		glUniformMatrix4fv(shader.u("M"), 1, false, value_ptr(M));
-		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
-
-		M = rotate(M, PI, vec3(0, 0, 1));
-		glUniformMatrix4fv(shader.u("M"), 1, false, value_ptr(M));
-		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+		glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
 
 		glDepthMask(true);
 	}
@@ -94,6 +119,7 @@ struct Sky {
 struct ColorCube {
 	ShaderProgram shader;
 	u32 vao, vbo[3];
+	i32 indexCount;
 
 	void load() {
 		Shader vs("res/shaders/colored_v.glsl", GL_VERTEX_SHADER);
@@ -121,8 +147,7 @@ struct ColorCube {
 		// index buffer
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo[2]);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(Cube::index), Cube::index, GL_STATIC_DRAW);
-
-		glBindVertexArray(0);
+		indexCount = Cube::indexCount;
 	}
 
 	void draw(mat4 P, mat4 V) {
@@ -135,8 +160,7 @@ struct ColorCube {
 		glUniformMatrix4fv(shader.u("M"), 1, false, value_ptr(M));
 
 		glBindVertexArray(vao);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo[2]);
-		glDrawElements(GL_TRIANGLES, Cube::indexCount, GL_UNSIGNED_INT, 0);
+		glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
 	}
 };
 

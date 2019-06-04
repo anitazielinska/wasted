@@ -36,7 +36,17 @@ typedef GLFWwindow Window;
 
 bool readFile(const char *path, std::string &data);
 
-u32 loadTexture(const char *path);
+u32 loadTexture(std::string path);
+
+u32 loadCubemap(std::vector<std::string> faces);
+
+bool loadAssImp(
+	const char *path, 
+	std::vector<u32> &indices,
+	std::vector<glm::vec3> &vertices,
+	std::vector<glm::vec3> &normals,
+	std::vector<glm::vec2> &uvs
+);
 
 void fatalError(const char *message);
 

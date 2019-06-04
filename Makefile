@@ -1,7 +1,7 @@
 HEADERS=src/common.hh src/game.hh
-FILES=src/main.cc src/common.cc src/game.cc lib/lodepng/*.cpp lib/glmmodel/*.cpp
-FLAGS=-Wall --std=c++17
-LIBS=-Ilib -lGL -lGLEW -lglfw -lGLU
+FILES=src/main.cc src/common.cc src/game.cc lib/lodepng/*.cpp
+FLAGS=-g -Wall --std=c++17
+LIBS=-Ilib -lGL -lGLEW -lglfw -lGLU -lassimp
 OUT=game
 CC=g++
 
