@@ -30,10 +30,12 @@ Camera camera(vec3(0, 0, 5), vec3(0, -PI, 0));
 Model sky("res/models/skydome/skydome.obj");
 Model cube("res/models/cube/cube.obj");
 Model suit("res/models/nanosuit/nanosuit.obj");
+Model bar("res/models/bar/Bar.obj");
 
 f32 cubeAngle = 0;
 
-Program skyShader("res/shaders/sky_v.glsl", "res/shaders/sky_f.glsl");
+Program flatShader("res/shaders/flat_v.glsl", "res/shaders/flat_f.glsl");
+Program phongShader("res/shaders/phong_v.glsl", "res/shaders/phong_f.glsl");
 
 mat4 P, V, M;
 
@@ -67,7 +69,8 @@ void toggleFlying() {
 }
 
 void reloadShaders() {
-	skyShader.reload();
+	flatShader.reload();
+	phongShader.reload();
 }
 
 void onUpdate(f32 dt) {
@@ -105,52 +108,63 @@ void onUpdate(f32 dt) {
 	V = camera.lookAt();
 }
 
-void drawSky(Program &shader) {
-	mat4 M(1.0);
-	M = translate(M, camera.pos + vec3(0, -50, 0));
-	M = scale(M, vec3(300));
-
-	glUniformMatrix4fv(shader.u("M"), 1, false, value_ptr(M));
-
-	glDepthMask(false);
-	sky.draw(shader);
-	glDepthMask(true);
-}
-
 // ----------------------------------------------------------------------------
 
 void onDraw() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glUseProgram(skyShader.id);
-	glUniformMatrix4fv(skyShader.u("P"), 1, false, value_ptr(P));
-	glUniformMatrix4fv(skyShader.u("V"), 1, false, value_ptr(V));
+	glUseProgram(flatShader.id);
+	glUniformMatrix4fv(flatShader.u("P"), 1, false, value_ptr(P));
+	glUniformMatrix4fv(flatShader.u("V"), 1, false, value_ptr(V));
 
-	drawSky(skyShader);
+	{
+		mat4 M(1.0);
+		M = translate(M, camera.pos + vec3(0, -50, 0));
+		M = scale(M, vec3(300));
+		glDepthMask(false);
+		glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
+		sky.draw(flatShader);
+		glDepthMask(true);
+	}
 
 	for (i32 x = 0; x < 10; x++) {
 	for (i32 y = 0; y < 10; y++) {
 		mat4 M(1.0);
 		M = translate(M, vec3(2*x - 5, 0.1, 2*y - 5));
 		M = rotate(M, cubeAngle, vec3(0, 1, 0));
-		glUniformMatrix4fv(skyShader.u("M"), 1, false, value_ptr(M));
-		cube.draw(skyShader);
+		glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
+		cube.draw(flatShader);
 	}
 	}
+
+
+	glUseProgram(flatShader.id);
+	glUniformMatrix4fv(flatShader.u("P"), 1, false, value_ptr(P));
+	glUniformMatrix4fv(flatShader.u("V"), 1, false, value_ptr(V));
+	//glUniform3fv(phongShader.u("ep"), 1, value_ptr(camera.pos));
+
 
 	{
 		mat4 M(1.0);
 		M = scale(M, vec3(200, 1, 200));
 		M = translate(M, vec3(0, -1, 0));
-		glUniformMatrix4fv(skyShader.u("M"), 1, false, value_ptr(M));
-		cube.draw(skyShader);
+		glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
+		cube.draw(flatShader);
 	}
 
 	{
 		mat4 M(1.0);
 		M = translate(M, vec3(0, 0, -20));
-		glUniformMatrix4fv(skyShader.u("M"), 1, false, value_ptr(M));
-		suit.draw(skyShader);
+		glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
+		suit.draw(flatShader);
+	}
+
+	{
+		mat4 M(1.0);
+		M = translate(M, vec3(-40, 0, -20));
+		M = scale(M, vec3(3));
+		glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
+		bar.draw(flatShader);
 	}
 
 
@@ -165,14 +179,16 @@ void onInit() {
 	reloadShaders();
 
 	sky.load();
-	suit.load();
 	cube.load();
+	suit.load();
+	bar.load();
 
 	glBindVertexArray(0);
 }
 
 void onExit() {
-	skyShader.unload();
+	flatShader.unload();
+	phongShader.unload();
 	sky.unload();
 	suit.unload();
 	cube.unload();
