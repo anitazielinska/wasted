@@ -1,6 +1,5 @@
 #include "engine.hh"
 
-#include <lodepng/lodepng.h>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -8,131 +7,308 @@
 using namespace std;
 using namespace glm;
 
-void loadAssImpMesh(
-	const aiMesh *mesh,
-	vector<u32> &indices,
-	vector<vec3> &vertices,
-	vector<vec3> &normals,
-	vector<vec2> &uvs
-){
-	const u32 vertexCount = mesh->mNumVertices;
-	vertices.resize(vertexCount);
-	normals.resize(vertexCount);
-	uvs.resize(vertexCount);
+// -----------------------------------------------
 
-	for (u32 i = 0; i < mesh->mNumVertices; i++) {
+void Camera::update() {
+	front = vec3(
+		cos(rot.x) * sin(rot.y),
+		sin(rot.x),
+		cos(rot.x) * cos(rot.y)
+	);
+	right = vec3(
+		sin(rot.y - PI/2),
+		0,
+		cos(rot.y - PI/2)
+	);
+	up = cross(right, front);
+}
+
+// -----------------------------------------------
+
+const vector<TextureType> textureTypes = {
+	TextureType::diffuse,
+	TextureType::specular,
+	TextureType::height,
+	TextureType::normal
+};
+
+void Model::readMesh(aiMesh *mesh, Mesh &x) {
+	u32 vertexCount = mesh->mNumVertices, faceCount = mesh->mNumFaces;
+	x.material = mesh->mMaterialIndex;
+	x.model = this;
+
+	x.vertices.resize(vertexCount);
+	for (u32 i = 0; i < vertexCount; i++) {
 		aiVector3D v = mesh->mVertices[i];
-		vertices[i] = vec3(v.x, v.y, v.z);
-
-		aiVector3D n = mesh->mNormals[i];
-		normals[i] = vec3(n.x, n.y, n.z);
-
-		// Assume 1 set of UV coords; AssImp supports 8 UV sets.
-		aiVector3D t = mesh->mTextureCoords[0][i];
-		uvs[i] = vec2(t.x, t.y);
+		x.vertices[i] = vec3(v.x, v.y, v.z);
 	}
 
-	for (u32 i = 0; i < mesh->mNumFaces; i++) {
+	for (u32 i = 0; i < faceCount; i++) {
 		aiFace face = mesh->mFaces[i];
 		for (u32 j = 0; j < face.mNumIndices; j++) {
-			indices.push_back(face.mIndices[j]);
+			x.indices.push_back(face.mIndices[j]);
+		}
+	}
+
+	if (mesh->HasNormals()) {
+		x.normals.resize(vertexCount);
+		for (u32 i = 0; i < vertexCount; i++) {
+			aiVector3D n = mesh->mNormals[i];
+			x.normals[i] = vec3(n.x, n.y, n.z);
+		}
+	}
+
+	if (mesh->HasTangentsAndBitangents()) {
+		x.tangents.resize(vertexCount);
+		x.bitangents.resize(vertexCount);
+		for (u32 i = 0; i < vertexCount; i++) {
+			aiVector3D t = mesh->mTangents[i];
+			aiVector3D b = mesh->mBitangents[i];
+			x.tangents[i] = vec3(t.x, t.y, t.z);
+			x.bitangents[i] = vec3(b.x, b.y, b.z);
+		}
+	}
+
+	// Assume 1 set of UV coords; AssImp supports 8 UV sets.
+	if (mesh->HasTextureCoords(0)) {
+		x.texCoords.resize(vertexCount);
+		for (u32 i = 0; i < vertexCount; i++) {
+			aiVector3D t = mesh->mTextureCoords[0][i];
+			x.texCoords[i] = vec2(t.x, t.y);
 		}
 	}
 }
 
-bool loadAssImp(
-	const char * path, 
-	vector<u32> &indices,
-	vector<vec3> &vertices,
-	vector<vec3> &normals,
-	vector<vec2> &uvs
-){
+void Model::readMaterial(aiMaterial *mat, Material &x) {
+	aiColor3D c(0, 0, 0);
+	aiString s;
 
+	mat->Get(AI_MATKEY_COLOR_DIFFUSE, c);
+	x.diffuse = vec3(c.r, c.g, c.b);
+	mat->Get(AI_MATKEY_COLOR_SPECULAR, c);
+	x.specular = vec3(c.r, c.g, c.b);
+	mat->Get(AI_MATKEY_COLOR_AMBIENT, c);
+	x.ambient = vec3(c.r, c.g, c.b);
+	mat->Get(AI_MATKEY_COLOR_EMISSIVE, c);
+	x.emissive = vec3(c.r, c.g, c.b);
+	mat->Get(AI_MATKEY_COLOR_TRANSPARENT, c);
+	x.transparent = vec3(c.r, c.g, c.b);
+
+	mat->Get(AI_MATKEY_SHININESS, x.shininess);
+	mat->Get(AI_MATKEY_SHININESS_STRENGTH, x.specularScale);
+	mat->Get(AI_MATKEY_OPACITY, x.opacity);
+	mat->Get(AI_MATKEY_TWOSIDED, x.backfaceCulling);
+	mat->Get(AI_MATKEY_NAME, s);
+	x.name = s.data;
+
+	string directory = path.substr(0, path.find_last_of('/'));
+	for (TextureType type : textureTypes) {
+		aiTextureType aiType = static_cast<aiTextureType>(type);
+		u32 count = mat->GetTextureCount(aiType);
+
+		for (u32 i = 0; i < count; i++) {
+			aiString name;
+			mat->GetTexture(aiType, i, &name);
+			string path = directory + "/" + name.data;
+
+			// TODO: do not load duplicate textures
+			Texture tex;
+			tex.type = type;
+			tex.path = path;
+			textures.push_back(tex);
+			x.textures.push_back(textures.size() - 1);
+
+			dprintf("-- material %s texture %s\n", x.name.c_str(), tex.path.c_str());
+		}
+	}
+}
+
+void Model::read() {
 	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile(path, aiProcess_FlipUVs);
+	const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs
+			| aiProcess_JoinIdenticalVertices | aiProcess_CalcTangentSpace);
 
-	if (!scene) {
-		fprintf(stderr, "error: assimp error '%s'\n", importer.GetErrorString());
-		return false;
+	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE) {
+		eprintf("error: assimp error '%s'\n", importer.GetErrorString());
+		return;
 	}
 
-	// Assume one mesh
-	const aiMesh *mesh = scene->mMeshes[0];
-	loadAssImpMesh(mesh, indices, vertices, normals, uvs);
-	
-	return true;
-}
+	u32 materialCount = scene->mNumMaterials, meshCount = scene->mNumMeshes, textureCount = scene->mNumTextures;
+	dprintf("info: reading model '%s' (%u meshes, %u materials, %u textures)\n",
+			path.c_str(), meshCount, materialCount, textureCount);
 
-
-struct PNG {
-	u32 width, height;
-	u8 *data;
-};
-
-PNG loadPNG(string path) {
-	const char *path_str = path.c_str();
-	u32 width, height;
-	u8 *data;
-	lodepng_decode32_file(&data, &width, &height, path_str);
-	if (!data) fprintf(stderr, "error: could not read image '%s'\n", path_str);
-	/*
-	u8 *temp = new u8[width * 4];
-	for(u32 i = 0; i < height / 2; i++) {
-		// copy row into temp array
-		memcpy(temp, &data[i * width * 4], (width * 4));
-		// copy other side of array into this row
-		memcpy(&data[i * width * 4], &data[(height - i - 1) * width * 4], (width * 4));
-		// copy temp into other side of array
-		memcpy(&data[(height - i - 1) * width * 4], temp, (width * 4));
+	materials.resize(materialCount);
+	for (u32 i = 0; i < materialCount; i++) {
+		readMaterial(scene->mMaterials[i], materials[i]);
 	}
-	delete[] temp;
-	*/
-	PNG png = { width, height, data };
-	return png;
+
+	meshes.resize(meshCount);
+	for (u32 i = 0; i < meshCount; i++) {
+		readMesh(scene->mMeshes[i], meshes[i]);
+	}
 }
 
-u32 loadTexture(string path) {
-	u32 id;
+void Model::load() {
+	read();
+	for (Texture &x : textures) x.load();
+	for (Mesh &x : meshes) x.load();
+}
+
+void Model::unload() {
+	for (Texture &x : textures) x.unload();
+	for (Mesh &x : meshes) x.unload();
+}
+
+void Model::draw(Program &shader) {
+	for (Mesh &x : meshes) x.draw(shader);
+}
+
+void printModel(Model &model) {
+	dprintf("------------\n");
+
+	dprintf("model '%s':\n", model.path.c_str());
+
+	dprintf("  textures:\n");
+	for (u32 i = 0; i < model.textures.size(); i++) {
+		Texture &tex = model.textures[i];
+		dprintf("  - '%s'\n", tex.path.c_str());
+	}
+
+	dprintf("  materials:\n");
+	for (u32 i = 0; i < model.materials.size(); i++) {
+		Material &mat = model.materials[i];
+		dprintf("  - '%s':\n", mat.name.c_str());
+		dprintf("      diffuse:  (%.1f, %.1f, %.1f)\n", mat.diffuse.x, mat.diffuse.y, mat.diffuse.z);
+		dprintf("      specular: (%.1f, %.1f, %.1f)\n", mat.specular.x, mat.specular.y, mat.specular.z);
+		dprintf("      ambient:  (%.1f, %.1f, %.1f)\n", mat.ambient.x, mat.ambient.y, mat.ambient.z);
+		dprintf("      emissive: (%.1f, %.1f, %.1f)\n", mat.emissive.x, mat.emissive.y, mat.emissive.z);
+		dprintf("      transp:   (%.1f, %.1f, %.1f)\n", mat.transparent.x, mat.transparent.y, mat.transparent.z);
+		for (u32 j = 0; j < mat.textures.size(); j++) {
+			Texture &tex = model.textures[mat.textures[j]];
+			dprintf("      texture: %s\n", tex.path.c_str());
+		}
+	}
+
+	dprintf("  meshes:\n");
+	for (u32 i = 0; i < model.meshes.size(); i++) {
+		Mesh &mesh = model.meshes[i];
+		Material &mat = model.materials[mesh.material];
+		dprintf("  - %u vao=%u:\n", i, mesh.vao);
+		dprintf("      material: '%s'\n", mat.name.c_str());
+		dprintf("      indices:    %lu\n", mesh.indices.size());
+		dprintf("      vertices:   %lu\n", mesh.vertices.size());
+		dprintf("      normals:    %lu\n", mesh.normals.size());
+		dprintf("      tangents:   %lu\n", mesh.tangents.size());
+		dprintf("      bitangents: %lu\n", mesh.bitangents.size());
+	}
+}
+
+// -----------------------------------------------
+
+void Mesh::load() {
+	glGenVertexArrays(1, &vao);
+	glGenBuffers(6, vbo);
+
+	glBindVertexArray(vao);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[0]);
+	glBufferData(GL_ARRAY_BUFFER, sizeof_vec(vertices), vertices.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, false, 0, 0);
+	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[1]);
+	glBufferData(GL_ARRAY_BUFFER, sizeof_vec(normals), normals.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 3, GL_FLOAT, false, 0, 0);
+	glEnableVertexAttribArray(1);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[2]);
+	glBufferData(GL_ARRAY_BUFFER, sizeof_vec(texCoords), texCoords.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(2, 2, GL_FLOAT, false, 0, 0);
+	glEnableVertexAttribArray(2);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[3]);
+	glBufferData(GL_ARRAY_BUFFER, sizeof_vec(tangents), tangents.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(3, 3, GL_FLOAT, false, 0, 0);
+	glEnableVertexAttribArray(3);
+
+	glBindBuffer(GL_ARRAY_BUFFER, vbo[4]);
+	glBufferData(GL_ARRAY_BUFFER, sizeof_vec(bitangents), bitangents.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer(4, 3, GL_FLOAT, false, 0, 0);
+	glEnableVertexAttribArray(4);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vbo[5]);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof_vec(indices), indices.data(), GL_STATIC_DRAW);
+	indexCount = indices.size();
+
+	glBindVertexArray(0);
+}
+
+void Mesh::unload() {
+	glDeleteBuffers(1, &vao);
+	glDeleteBuffers(6, vbo);
+}
+
+void Mesh::draw(Program &shader) {
+	Material &mat = model->materials[material];
+
+	u32 diffuseId = 0, normalId = 0, heightId = 0, specularId = 0;
+	for (u32 i = 0; i < mat.textures.size(); i++) {
+		Texture &tex = model->textures[mat.textures[i]];
+
+		string var;
+		switch (tex.type) {
+			case TextureType::diffuse: var = "DiffuseMap" + to_string(diffuseId++); break;
+			case TextureType::normal: var = "NormalMap" + to_string(normalId++); break;
+			case TextureType::height: var = "HeightMap" + to_string(heightId++); break;
+			case TextureType::specular: var = "SpecularMap" + to_string(specularId++); break;
+		}
+
+		//dprintf("info: -- %u tex(vao=%u, id=%u, name=%s) -> %s\n", i, vao, tex.id, tex.path.c_str(), var.c_str());
+		glActiveTexture(GL_TEXTURE0 + i);
+		glBindTexture(GL_TEXTURE_2D, tex.id);
+		glUniform1i(shader.u(var.c_str()), i);
+	}
+
+	glBindVertexArray(vao);
+	glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
+	glActiveTexture(GL_TEXTURE0);
+}
+
+// -----------------------------------------------
+
+void Texture::read() {
+}
+
+void Texture::load() {
+	if (!ilLoadImage(path.c_str())) {
+		eprintf("error: could not load image '%s'\n", path.c_str());
+		return;
+	}
+
+	format = ilGetInteger(IL_IMAGE_FORMAT);
+	height = ilGetInteger(IL_IMAGE_HEIGHT);
+	width = ilGetInteger(IL_IMAGE_WIDTH);
+	u8 *data = ilGetData();
+
 	glGenTextures(1, &id);
+	//dprintf("info: loading texture '%s' at id %u\n", path.c_str(), id);
+
 	glBindTexture(GL_TEXTURE_2D, id);
-
-	PNG png = loadPNG(path);
-	if (!png.data) return 0;
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-			png.width, png.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, png.data);
-	delete[] png.data;
-
+	glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
 	glGenerateMipmap(GL_TEXTURE_2D);
+
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-	return id;
 }
 
-u32 loadCubemap(vector<string> faces) {
-	u32 id;
-	glGenTextures(1, &id);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, id);
-
-	for (u32 i = 0; i < faces.size(); i++) {
-		string path = faces[i];
-		PNG png = loadPNG(path);
-		if (!png.data) return 0;
-		glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGBA,
-				png.width, png.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, png.data);
-		delete[] png.data;
-	}
-
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-	return id;
+void Texture::unload() {
+	glDeleteTextures(1, &id);
 }
+
+// -----------------------------------------------
 
 i32 checkShaderStatus(u32 id) {
 	i32 logLength = 0;
@@ -148,32 +324,39 @@ i32 checkShaderStatus(u32 id) {
 	return result;
 }
 
-Shader::Shader(string path, i32 type) {
-	fprintf(stderr, "info: compiling shader '%s'\n", path.c_str());
-
+Shader::Shader(const string &path, i32 type) {
 	string code;
 	if (!readFile(path, code)) return;
-	char const *code_ptr = code.c_str();
+	const char *code_ptr = code.c_str();
 
+	eprintf("info: compiling shader '%s'\n", path.c_str());
 	id = glCreateShader(type);
 	glShaderSource(id, 1, &code_ptr, NULL);
 	glCompileShader(id);
 	checkShaderStatus(id);
 }
 
-ShaderProgram::ShaderProgram(vector<Shader*> shaders) {
-	fprintf(stderr, "info: linking shader program\n");
+void Program::load() {
+	vector<Shader> shaders;
+	shaders.push_back(Shader(vs, GL_VERTEX_SHADER));
+	shaders.push_back(Shader(fs, GL_FRAGMENT_SHADER));
+	if (!gs.empty()) shaders.push_back(Shader(gs, GL_GEOMETRY_SHADER));
+
+	eprintf("info: linking shader program\n");
 	id = glCreateProgram();
 
-	for (Shader *shader : shaders) {
-		glAttachShader(id, shader->id);
-	}
-
+	for (Shader &shader : shaders) glAttachShader(id, shader.id);
 	glLinkProgram(id);
 	checkShaderStatus(id);
+	for (Shader &shader : shaders) glDetachShader(id, shader.id);
+}
 
-	for (Shader *shader : shaders) {
-		glDetachShader(id, shader->id);
-	}
+void Program::unload() {
+	glDeleteProgram(id);
+}
+
+void Program::reload() {
+	unload();
+	load();
 }
 

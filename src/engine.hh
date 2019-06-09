@@ -1,37 +1,125 @@
 #pragma once
 
 #include "util.hh"
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
+#include <deque>
 
-u32 loadTexture(string path);
+using std::deque;
 
-u32 loadCubemap(vector<string> faces);
+struct Model;
+struct Mesh;
+struct Material;
+struct Texture;
 
-bool loadAssImp(const char *path,  vector<u32> &indices,
-		vector<vec3> &vertices, vector<vec3> &normals, vector<vec2> &uvs);
-
-struct Mesh {
-	vector<vec3> vertices, normals;
-	vector<vec2> uvs;
-	vector<u32> indices;
-};
+void printModel(Model &model);
 
 struct Shader {
 	u32 id = 0;
 
-	Shader(string file_path, i32 type);
-	~Shader() { glDeleteShader(id); }
+	Shader(const string &path, i32 type);
+	//~Shader() { glDeleteShader(id); }
 };
 
-struct ShaderProgram {
-	u32 id;
+struct Program {
+	u32 id = 0;
+	string vs, fs, gs;
 
-	ShaderProgram(u32 id = 0): id(id) {};
-	ShaderProgram(vector<Shader*> shaders);
-	~ShaderProgram() { glDeleteProgram(id); };
-	ShaderProgram& operator=(ShaderProgram &&other) { std::swap(id, other.id); return *this; };
-	ShaderProgram& operator=(const ShaderProgram& other) = delete;
+	Program(u32 id = 0): id(id) {};
+	Program(string vs, string fs, string gs = ""): vs(vs), fs(fs), gs(gs) {};
 
-	u32 u(const char *name) { return glGetUniformLocation(id, name); };
-	u32 a(const char *name) { return glGetAttribLocation(id, name); };
+	//~Program() { glDeleteProgram(id); };
+	//Program& operator=(Program &&other) { std::swap(id, other.id); return *this; };
+	//Program& operator=(const Program& other) = delete;
+
+	void load();
+	void unload();
+	void reload();
+
+	u32 u(string name) { return glGetUniformLocation(id, name.c_str()); };
+	u32 a(string name) { return glGetAttribLocation(id, name.c_str()); };
+};
+
+enum class TextureType : u32 {
+	diffuse = aiTextureType_DIFFUSE,
+	specular = aiTextureType_SPECULAR,
+	height = aiTextureType_HEIGHT,
+	normal = aiTextureType_NORMALS,
+};
+
+struct Texture {
+	u32 id = 0, width, height, format;
+	string path;
+	TextureType type;
+	bool embedded;
+
+	void read();
+	void load();
+	void unload();
+	void reload();
+};
+
+struct Material {
+	string name;
+	vec3 diffuse, specular, ambient, emissive, transparent;
+	f32 shininess, opacity, specularScale;
+	bool backfaceCulling;
+	vector<u32> textures;
+};
+
+struct Mesh {
+	u32 indexCount;
+	u32 vao, vbo[6];
+	u32 material;
+
+	vector<vec3> vertices, normals, tangents, bitangents;
+	vector<vec2> texCoords;
+	vector<u32> indices;
+
+	Model *model;
+
+	void load();
+	void unload();
+
+	void draw(Program &shader);
+};
+
+struct Model {
+	string path;
+	vector<Mesh> meshes;
+	vector<Material> materials;
+	vector<Texture> textures;
+
+	Model(string path = ""): path(path) {};
+
+	void read();
+	void readMesh(aiMesh *mesh, Mesh &x);
+	void readMaterial(aiMaterial *mat, Material &x);
+
+	void load();
+	void unload();
+	void reload();
+	void draw(Program &shader);
+};
+
+struct Camera {
+	// rot.x: pitch, rot.y: yaw, rot.z: roll (roll not implemented)
+	vec3 pos, rot, front, up, right, world;
+
+	Camera(vec3 pos, vec3 rot): pos(pos), rot(rot) {
+		world = vec3(0, 1, 0);
+		front = vec3(0, 0, -1);
+		up = vec3(0, 1, 0);
+		update();
+	}
+
+	mat4 lookAt() { return glm::lookAt(pos, pos + front, up); }
+	void update();
+
+	void offsetFront(f32 delta) { pos += front * delta; }
+	void offsetRight(f32 delta) { pos += right * delta; }
+	void offsetUp(f32 delta)    { pos += world * delta; }
+	void offsetPitch(f32 delta) { rot.x += delta; update(); }
+	void offsetYaw(f32 delta)   { rot.y += delta; update(); }
 };
 

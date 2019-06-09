@@ -6,6 +6,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <memory>
 #include <algorithm>
 
 #include <GL/glew.h>
@@ -16,15 +17,30 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include <IL/il.h>
+
+#define DEBUG
 #define PI 3.14159f
 #define TAU (2*PI)
 
 #define sizeof_val(X) (sizeof(X[0]))
 #define sizeof_vec(X) (sizeof(X[0]) * X.size())
 
+// Removing commas with '##' only works in GCC!
+#define eprintf(f_, ...) fprintf(stderr, (f_), ##__VA_ARGS__)
+
+#ifdef DEBUG
+#define dprintf(f_, ...) fprintf(stderr, (f_), ##__VA_ARGS__)
+#else
+#define dprintf(f_, ...)
+#endif
+
 using std::string;
+using std::shared_ptr;
+using std::weak_ptr;
 using std::vector;
 using glm::mat4;
+using glm::vec4;
 using glm::vec3;
 using glm::vec2;
 
@@ -58,5 +74,5 @@ inline f64 rad(f64 deg) {
 	return deg * PI / 180.0;
 }
 
-bool readFile(string path, string &data);
-
+bool readFile(const string &path, string &data);
+bool fileExists(const string &path);

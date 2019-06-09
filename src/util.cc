@@ -5,7 +5,7 @@
 
 using namespace std;
 
-bool readFile(string path, string &data) {
+bool readFile(const string &path, string &data) {
 	ifstream file(path, ios::in);
 	if (!file.is_open()) {
 		fprintf(stderr, "error: couldn't open file '%s'\n", path.c_str());
@@ -18,3 +18,7 @@ bool readFile(string path, string &data) {
 	return true;
 }
 
+bool fileExists(const string &name) {
+	std::ifstream f(name.c_str());
+	return f.good();
+}

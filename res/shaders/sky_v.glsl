@@ -1,16 +1,16 @@
 #version 330 core
 
+layout (location = 0) in vec3 vertex;
+layout (location = 1) in vec3 normal;
+layout (location = 2) in vec2 texCoord;
+
 uniform mat4 P;
 uniform mat4 V;
 uniform mat4 M;
 
-in vec3 a_Vertex;
-in vec3 a_Normal;
-in vec2 a_TexCoord;
-
-out vec2 v_TexCoord;
+out vec2 TexCoord;
 
 void main() {
-	v_TexCoord = a_TexCoord;
-	gl_Position = P * V * M * vec4(a_Vertex, 1.0);
+	TexCoord = texCoord;
+	gl_Position = P*V*M * vec4(vertex, 1.0);
 }

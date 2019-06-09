@@ -1,5 +1,5 @@
 #include "util.hh"
-#include "game.hh"
+#include "engine.hh"
 
 using namespace std;
 using namespace glm;
@@ -9,14 +9,14 @@ f32 aspectRatio = (f32) windowWidth / windowHeight;
 Window *window;
 
 f32 initialFoV = 45.0;
-f32 movementSpeed = 3.0;
+f32 movementSpeed = 10.0;
 
 bool mouseLocked = false;
 f32 mouseSpeed = 0.001;
 f32 mouseWheel = 0.0;
 
 bool flyingEnabled = true;
-f32 playerHeight = 0;
+f32 playerHeight = 2;
 
 u32 KEY_DIR_U = GLFW_KEY_W;
 u32 KEY_DIR_L = GLFW_KEY_A;
@@ -26,10 +26,16 @@ u32 KEY_FLY_U = GLFW_KEY_SPACE;
 u32 KEY_FLY_D = GLFW_KEY_LEFT_SHIFT;
 
 Camera camera(vec3(0, 0, 5), vec3(0, -PI, 0));
-ColorCube cube;
-Sky sky;
 
-mat4 P, V;
+Model sky("res/models/skydome/skydome.obj");
+Model cube("res/models/cube/cube.obj");
+Model suit("res/models/nanosuit/nanosuit.obj");
+
+f32 cubeAngle = 0;
+
+Program skyShader("res/shaders/sky_v.glsl", "res/shaders/sky_f.glsl");
+
+mat4 P, V, M;
 
 // ----------------------------------------------------------------------------
 
@@ -55,9 +61,13 @@ void lockMouse() {
 void toggleFlying() {
 	flyingEnabled = !flyingEnabled;
 	if (flyingEnabled)
-		fprintf(stderr, "info: flying enabled\n");
+		eprintf("info: flying enabled\n");
 	else
-		fprintf(stderr, "info: flying disabled\n");
+		eprintf("info: flying disabled\n");
+}
+
+void reloadShaders() {
+	skyShader.reload();
 }
 
 void onUpdate(f32 dt) {
@@ -80,42 +90,92 @@ void onUpdate(f32 dt) {
 		if (glfwGetKey(window, KEY_DIR_L) == GLFW_PRESS) dx -= dt * movementSpeed;
 		if (glfwGetKey(window, KEY_FLY_U) == GLFW_PRESS) dy += dt * movementSpeed;
 		if (glfwGetKey(window, KEY_FLY_D) == GLFW_PRESS) dy -= dt * movementSpeed;
+
 		camera.offsetRight(dx);
 		camera.offsetFront(dz);
 		//camera.offsetUp(dy);
-		if (flyingEnabled) {
-			playerHeight += dy;
-		}
+		if (flyingEnabled) playerHeight += dy;
 		camera.pos.y = playerHeight;
 	}
 
+	cubeAngle += 0.01;
+
 	f32 FoV = initialFoV - 5 * mouseWheel;
-	P = perspective(radians(FoV), aspectRatio, -1.0f, 1.0f);
+	P = perspective(radians(FoV), aspectRatio, 1.0f, 500.0f);
 	V = camera.lookAt();
+}
+
+void drawSky(Program &shader) {
+	mat4 M(1.0);
+	M = translate(M, camera.pos + vec3(0, -50, 0));
+	M = scale(M, vec3(300));
+
+	glUniformMatrix4fv(shader.u("M"), 1, false, value_ptr(M));
+
+	glDepthMask(false);
+	sky.draw(shader);
+	glDepthMask(true);
 }
 
 // ----------------------------------------------------------------------------
 
-void onInit() {
-	glClearColor(0.0, 0.0, 0.4, 0.0);
-	glEnable(GL_DEPTH_TEST);
-	glEnable(GL_CULL_FACE);
-	glDepthFunc(GL_LESS);
-
-	cube.load();
-	sky.load();
-	glBindVertexArray(0);
-}
-
 void onDraw() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	sky.draw(P, V, camera.pos);
-	cube.draw(P, V);
+
+	glUseProgram(skyShader.id);
+	glUniformMatrix4fv(skyShader.u("P"), 1, false, value_ptr(P));
+	glUniformMatrix4fv(skyShader.u("V"), 1, false, value_ptr(V));
+
+	drawSky(skyShader);
+
+	for (i32 x = 0; x < 10; x++) {
+	for (i32 y = 0; y < 10; y++) {
+		mat4 M(1.0);
+		M = translate(M, vec3(2*x - 5, 0.1, 2*y - 5));
+		M = rotate(M, cubeAngle, vec3(0, 1, 0));
+		glUniformMatrix4fv(skyShader.u("M"), 1, false, value_ptr(M));
+		cube.draw(skyShader);
+	}
+	}
+
+	{
+		mat4 M(1.0);
+		M = scale(M, vec3(200, 1, 200));
+		M = translate(M, vec3(0, -1, 0));
+		glUniformMatrix4fv(skyShader.u("M"), 1, false, value_ptr(M));
+		cube.draw(skyShader);
+	}
+
+	{
+		mat4 M(1.0);
+		M = translate(M, vec3(0, 0, -20));
+		glUniformMatrix4fv(skyShader.u("M"), 1, false, value_ptr(M));
+		suit.draw(skyShader);
+	}
+
+
 	glfwSwapBuffers(window);
 }
 
-void onExit() {
+void onInit() {
+	glClearColor(1.0, 1.0, 1.0, 0.0);
+	glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_CULL_FACE);
 
+	reloadShaders();
+
+	sky.load();
+	suit.load();
+	cube.load();
+
+	glBindVertexArray(0);
+}
+
+void onExit() {
+	skyShader.unload();
+	sky.unload();
+	suit.unload();
+	cube.unload();
 }
 
 void onResize(Window *window, i32 width, i32 height) {
@@ -142,14 +202,17 @@ void onKeyboard(Window *window, i32 key, i32 code, i32 action, i32 mods) {
 	if (action == GLFW_PRESS) {
 		if (key == GLFW_KEY_ESCAPE) unlockMouse();
 		if (key == GLFW_KEY_M) toggleFlying();
+		if (key == GLFW_KEY_R) reloadShaders();
 	}
 }
 
 void onError(i32 code, char *message) {
-	fprintf(stderr, "error %d: %s\n", code, message);
+	eprintf("error %d: %s\n", code, message);
 }
 
 int main(void) {
+	ilInit();
+
 	if (!glfwInit()) fatalError("failed to init GLEW");
 	glfwWindowHint(GLFW_SAMPLES, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);

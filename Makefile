@@ -1,7 +1,7 @@
-HEADERS=src/game.hh src/engine.hh src/util.hh
-FILES=src/main.cc src/game.cc src/engine.cc src/util.cc lib/lodepng/*.cpp
+HEADERS=src/engine.hh src/util.hh
+FILES=src/main.cc src/engine.cc src/util.cc
 FLAGS=-g -Wall --std=c++17
-LIBS=-Ilib -lGL -lGLEW -lglfw -lGLU -lassimp
+LIBS=-Ilib -lGL -lGLEW -lglfw -lGLU -lassimp -lIL
 OUT=game
 CC=g++
 
