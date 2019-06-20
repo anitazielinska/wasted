@@ -33,7 +33,7 @@ Camera camera(vec3(0, 0, 10), vec3(0, -PI, 0));
 Model sky("res/models/skydome/skydome.obj");
 Model cube("res/models/cube/cube.obj");
 Model testCube("res/models/cube/cube.obj");
-Model bottle("res/models/bottles/BP_beer.fbx");
+Model bottle("res/models/poly/Beer.obj");
 Model bar("res/models/bar/Bar.obj");
 
 f32 cubeAngle = 0;
@@ -180,24 +180,24 @@ void onDraw() {
     {
         mat4 M(1.0);
         M = translate(M, vec3(-8, 8, -16));
-        M = scale(M, vec3(15, 15, 15));
-        M = rotate(M, cubeAngle, vec3(0, 0, 1));
         glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
         bottle.draw(flatShader);
+
 
         M = translate(M, bottle.center);
         M = scale(M, bottle.size);
         vec3 worldMax = M * vec4(testCube.maxCoords, 1);
         vec3 worldMin = M * vec4(testCube.minCoords, 1);
 
-        //bounding box preview
-        glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
-        testCube.draw(flatShader);
-
-		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-			if (testAABB(camera.front, worldMin, worldMax))
-				dprintf("did click the bounding box!\n");
-		}
+        // rysuj bounding box jak patrzymy na obiekt
+        if (testAABB(camera.front, worldMin, worldMax)) {
+            //bounding box wireframe
+            glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
+            // glPolygonMode rysuje tylko obwódkę
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            testCube.draw(flatShader);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        }
     }
 
     {
