@@ -96,7 +96,7 @@ struct Model {
 	void read();
 	void readMesh(aiMesh *mesh, Mesh &x);
 	void readMaterial(aiMaterial *mat, Material &x);
-    void boundingBox(aiMesh *mesh, vec3 &min, vec3 &max);
+	void boundingBox(aiMesh *mesh, vec3 &min, vec3 &max);
 
 	void load();
 	void unload();

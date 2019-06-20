@@ -45,9 +45,6 @@ Program phongShader("res/shaders/phong_v.glsl", "res/shaders/phong_f.glsl");
 mat4 P, V, M;
 f32 FoV;
 
-//tests
-vec3 worldMax, worldMin;
-
 // ----------------------------------------------------------------------------
 
 void centerMouse() {
@@ -69,58 +66,27 @@ void lockMouse() {
 	centerMouse();
 }
 
-bool rayTracing(float x, float y) {
-    //to normalised device space
-    x = (2*x) / windowWidth - 1.0f;
-    y = -((2*y) / windowHeight - 1.0f);
+bool testAABB(vec3 ray, vec3 worldMin, vec3 worldMax) {
+    using std::max;
+    using std::min;
 
-    //to homogeneous clip space
-    vec4 clipCoords = vec4(x, y, -1.0f, 1.0f);
+    ray = vec3(1.0 /  ray.x, 1.0 / ray.y, 1.0 / ray.z);
+    float t1 = (worldMin.x - camera.pos.x) * ray.x;
+    float t2 = (worldMax.x - camera.pos.x) * ray.x;
+    float t3 = (worldMin.y - camera.pos.y) * ray.y;
+    float t4 = (worldMax.y - camera.pos.y) * ray.y;
+    float t5 = (worldMin.z - camera.pos.z) * ray.z;
+    float t6 = (worldMax.z - camera.pos.z) * ray.z;
 
-    //to eye space
-    mat4 invertedProjection = inverse(P);
-    vec4 eyeCoords = invertedProjection * clipCoords;
-    eyeCoords = vec4(eyeCoords.x, eyeCoords.y, -1.0f, 0.0f);
+    float tMin = max(max(min(t1, t2), min(t3, t4)), min(t5, t6));
+    float tMax = min(min(max(t1, t2), max(t3, t4)), max(t5, t6));
 
-    //to world space
-    mat4 invertedView = inverse(V);
-    vec4 rayWorld = invertedView * eyeCoords;
-    vec3 mouseRay = normalize(vec3(rayWorld.x, rayWorld.y, rayWorld.z));
-
-    //dprintf("x: %f, y: %f, z: %f \n", mouseRay.x, mouseRay.y, mouseRay.z);
-
-    //intersection
-
-    vec3 ray = mouseRay;
-    ray.x = 1.0f / mouseRay.x;
-    ray.y = 1.0f / mouseRay.y;
-    ray.z = 1.0f / mouseRay.z;
-
-    float t1 = (worldMin.x - camera.pos.x)*ray.x;
-    float t2 = (worldMax.x - camera.pos.x)*ray.x;
-    float t3 = (worldMin.y - camera.pos.y)*ray.y;
-    float t4 = (worldMax.y - camera.pos.y)*ray.y;
-    float t5 = (worldMin.z - camera.pos.z)*ray.z;
-    float t6 = (worldMax.z - camera.pos.z)*ray.z;
-
-    float tMin = std::max(std::max(std::min(t1, t2), std::min(t3, t4)), std::min(t5, t6));
-    float tMax = std::min(std::min(std::max(t1, t2), std::max(t3, t4)), std::max(t5, t6));
-
-    dprintf("tMin: %f, tMax: %f \n", tMin, tMax);
-
-    float minDistance;
+    float minDistance = tMax;
 
     //if tmax < 0, ray (line) is intersecting AABB, but the whole AABB is behind us
-    if (tMax < 0) {
-        minDistance = tMax;
-        return false;
-    }
-
+    if (tMax < 0) return false;
     //if tmin > tmax, ray doesn't intersect AABB
-    if (tMin > tMax) {
-        minDistance = tMax;
-        return false;
-    }
+    if (tMin > tMax) return false;
 
     minDistance = tMin;
     return true;
@@ -149,9 +115,6 @@ void onUpdate(f32 dt) {
 		f64 dry = mouseSpeed * (windowWidth / 2.0 - xpos);
 		camera.offsetPitch(drx);
 		camera.offsetYaw(dry);
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-            if (rayTracing(xpos, ypos)) cout << "true" << endl;
-        }
 	}
 
 	{
@@ -169,6 +132,8 @@ void onUpdate(f32 dt) {
 		if (flyingEnabled) playerHeight += dy;
 		camera.pos.y = playerHeight;
 	}
+
+    //dprintf("pos: (x: %.2f, y: %.2f, z: %.2f)\n", camera.pos.x, camera.pos.y, camera.pos.z);
 
 	if (objectChosen) cubeAngle += 0.01;
 
@@ -217,16 +182,21 @@ void onDraw() {
         M = scale(M, vec3(15, 15, 15));
         M = rotate(M, cubeAngle, vec3(0, 0, 1));
         glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
-        bottle.draw(phongShader);
+        bottle.draw(flatShader);
 
         M = translate(M, bottle.center);
         M = scale(M, bottle.size);
-        worldMax = M * vec4(testCube.maxCoords, 0);
-        worldMin = M * vec4(testCube.minCoords, 0);
+        vec3 worldMax = M * vec4(testCube.maxCoords, 1);
+        vec3 worldMin = M * vec4(testCube.minCoords, 1);
 
         //bounding box preview
         glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
         testCube.draw(flatShader);
+
+		if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+			if (testAABB(camera.front, worldMin, worldMax))
+				dprintf("did click the bounding box!\n");
+		}
     }
 
     {
@@ -282,7 +252,7 @@ void onMouseClick(Window *window, i32 button, i32 action, i32 mods) {
 		f64 x, y;
 		glfwGetCursorPos(window, &x, &y);
 		if (button == GLFW_MOUSE_BUTTON_LEFT)
-            if (!mouseLocked) lockMouse();
+	    if (!mouseLocked) lockMouse();
 	}
 }
 

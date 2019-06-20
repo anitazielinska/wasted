@@ -154,15 +154,15 @@ void Model::read() {
 		readMaterial(scene->mMaterials[i], materials[i]);
 	}
 
-    minCoords = vec3(scene->mMeshes[0]->mVertices[0].x, scene->mMeshes[0]->mVertices[0].y, scene->mMeshes[0]->mVertices[0].z);
-    maxCoords = vec3(scene->mMeshes[0]->mVertices[0].x, scene->mMeshes[0]->mVertices[0].y, scene->mMeshes[0]->mVertices[0].z);
+	minCoords = vec3(scene->mMeshes[0]->mVertices[0].x, scene->mMeshes[0]->mVertices[0].y, scene->mMeshes[0]->mVertices[0].z);
+	maxCoords = vec3(scene->mMeshes[0]->mVertices[0].x, scene->mMeshes[0]->mVertices[0].y, scene->mMeshes[0]->mVertices[0].z);
 	meshes.resize(meshCount);
 	for (u32 i = 0; i < meshCount; i++) {
 		readMesh(scene->mMeshes[i], meshes[i]);
 		boundingBox(scene->mMeshes[i], minCoords, maxCoords);
 	}
-    size = vec3(maxCoords.x - minCoords.x, maxCoords.y - minCoords.y, maxCoords.z - minCoords.z);
-    center = vec3((minCoords.x + maxCoords.x)/2, (minCoords.y + maxCoords.y)/2, (minCoords.z + maxCoords.z)/2);
+	size = vec3(maxCoords.x - minCoords.x, maxCoords.y - minCoords.y, maxCoords.z - minCoords.z);
+	center = vec3((minCoords.x + maxCoords.x)/2, (minCoords.y + maxCoords.y)/2, (minCoords.z + maxCoords.z)/2);
 }
 
 void Model::load() {
