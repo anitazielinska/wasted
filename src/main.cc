@@ -222,7 +222,7 @@ void onDraw() {
         M = translate(M, bottle.center);
         M = scale(M, bottle.size);
         worldMax = M * vec4(testCube.maxCoords, 0);
-        worldlMin = M * vec4(testCube.minCoords, 0);
+        worldMin = M * vec4(testCube.minCoords, 0);
 
         //bounding box preview
         glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
