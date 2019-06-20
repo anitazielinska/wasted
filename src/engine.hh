@@ -89,12 +89,14 @@ struct Model {
 	vector<Mesh> meshes;
 	vector<Material> materials;
 	vector<Texture> textures;
+	vec3 minCoords, maxCoords, center, size;
 
 	Model(string path = ""): path(path) {};
 
 	void read();
 	void readMesh(aiMesh *mesh, Mesh &x);
 	void readMaterial(aiMaterial *mat, Material &x);
+    void boundingBox(aiMesh *mesh, vec3 &min, vec3 &max);
 
 	void load();
 	void unload();

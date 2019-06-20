@@ -123,6 +123,18 @@ void Model::readMaterial(aiMaterial *mat, Material &x) {
 	}
 }
 
+void Model::boundingBox(aiMesh *mesh, vec3 &minCoords, vec3 &maxCoords) {
+    u32 verticesCount = mesh->mNumVertices;
+    for (u32 i = 0; i < verticesCount; i++) {
+        if ( mesh->mVertices[i].x < minCoords.x ) minCoords.x = mesh->mVertices[i].x;
+        if ( mesh->mVertices[i].y < minCoords.y ) minCoords.y = mesh->mVertices[i].y;
+        if ( mesh->mVertices[i].z < minCoords.z ) minCoords.z = mesh->mVertices[i].z;
+        if ( mesh->mVertices[i].x > maxCoords.x ) maxCoords.x = mesh->mVertices[i].x;
+        if ( mesh->mVertices[i].y > maxCoords.y ) maxCoords.y = mesh->mVertices[i].y;
+        if ( mesh->mVertices[i].z > maxCoords.z ) maxCoords.z = mesh->mVertices[i].z;
+    }
+}
+
 void Model::read() {
 	Assimp::Importer importer;
 	const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs
@@ -142,10 +154,15 @@ void Model::read() {
 		readMaterial(scene->mMaterials[i], materials[i]);
 	}
 
+    minCoords = vec3(scene->mMeshes[0]->mVertices[0].x, scene->mMeshes[0]->mVertices[0].y, scene->mMeshes[0]->mVertices[0].z);
+    maxCoords = vec3(scene->mMeshes[0]->mVertices[0].x, scene->mMeshes[0]->mVertices[0].y, scene->mMeshes[0]->mVertices[0].z);
 	meshes.resize(meshCount);
 	for (u32 i = 0; i < meshCount; i++) {
 		readMesh(scene->mMeshes[i], meshes[i]);
+		boundingBox(scene->mMeshes[i], minCoords, maxCoords);
 	}
+    size = vec3(maxCoords.x - minCoords.x, maxCoords.y - minCoords.y, maxCoords.z - minCoords.z);
+    center = vec3((minCoords.x + maxCoords.x)/2, (minCoords.y + maxCoords.y)/2, (minCoords.z + maxCoords.z)/2);
 }
 
 void Model::load() {
