@@ -70,26 +70,27 @@ bool testAABB(vec3 ray, vec3 worldMin, vec3 worldMax) {
     using std::max;
     using std::min;
 
-    ray = vec3(1.0 /  ray.x, 1.0 / ray.y, 1.0 / ray.z);
-    float t1 = (worldMin.x - camera.pos.x) * ray.x;
-    float t2 = (worldMax.x - camera.pos.x) * ray.x;
-    float t3 = (worldMin.y - camera.pos.y) * ray.y;
-    float t4 = (worldMax.y - camera.pos.y) * ray.y;
-    float t5 = (worldMin.z - camera.pos.z) * ray.z;
-    float t6 = (worldMax.z - camera.pos.z) * ray.z;
+    ray = 1.0f / ray;
+    f32 t1 = (worldMin.x - camera.pos.x) * ray.x;
+    f32 t2 = (worldMax.x - camera.pos.x) * ray.x;
+    f32 t3 = (worldMin.y - camera.pos.y) * ray.y;
+    f32 t4 = (worldMax.y - camera.pos.y) * ray.y;
+    f32 t5 = (worldMin.z - camera.pos.z) * ray.z;
+    f32 t6 = (worldMax.z - camera.pos.z) * ray.z;
 
-    float tMin = max(max(min(t1, t2), min(t3, t4)), min(t5, t6));
-    float tMax = min(min(max(t1, t2), max(t3, t4)), max(t5, t6));
+    f32 tMin = max(max(min(t1, t2), min(t3, t4)), min(t5, t6));
+    f32 tMax = min(min(max(t1, t2), max(t3, t4)), max(t5, t6));
 
-    float minDistance = tMax;
-
-    //if tmax < 0, ray (line) is intersecting AABB, but the whole AABB is behind us
-    if (tMax < 0) return false;
-    //if tmin > tmax, ray doesn't intersect AABB
-    if (tMin > tMax) return false;
-
-    minDistance = tMin;
-    return true;
+    // if tmax < 0, ray (line) is intersecting AABB, but the whole AABB is behind us, or
+    // if tmin > tmax, ray doesn't intersect AABB
+    //f32 minDistance;
+    if (tMax < 0 || tMin > tMax) {
+        //minDistance = tMax;
+        return false;
+    } else {
+        //minDistance = tMin;
+        return true;
+    }
 }
 
 void toggleFlying() {

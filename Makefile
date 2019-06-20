@@ -1,18 +1,32 @@
-HEADERS=src/engine.hh src/util.hh
-FILES=src/main.cc src/engine.cc src/util.cc
-FLAGS=-g -Wall --std=c++17
-LIBS=-Ilib -lGL -lGLEW -lglfw -lGLU -lassimp -lIL
-OUT=game
-CC=g++
+SRC = src
+OUT = out
+OBJ = out
+EXE = out/game
+
+SOURCES = $(wildcard $(SRC)/*.cc)
+OBJECTS = $(patsubst $(SRC)/%.cc, $(OBJ)/%.o, $(SOURCES))
+
+LIBS  = -lGL -lGLEW -lglfw -lGLU -lassimp -lIL
+FLAGS = -Wall --std=c++17
+CC    = g++ $(FLAGS)
 
 .PHONY: clean
 
-build: $(FILES) $(HEADERS)
-	@mkdir -p out
-	$(CC) $(FLAGS) $(FILES) $(LIBS) -I. -o out/$(OUT)
+debug: FLAGS += -g -O0
+debug: all
 
-run: build
-	out/$(OUT)
+optim: FLAGS += -O3
+optim: all
+
+$(OBJ)/%.o: $(SRC)/%.cc
+	@mkdir -p out
+	$(CC) -I$(SRC) -c $< -o $@
+
+all: $(OBJECTS)
+	$(CC) $(LIBS) $^ -o $(EXE)
+
+run: all
+	$(EXE)
 
 clean:
 	rm -rf out
