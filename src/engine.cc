@@ -10,7 +10,7 @@ using namespace glm;
 // -----------------------------------------------
 
 void Camera::update() {
-    f32 zFront = 0.1 * sin(rot.x) * sin(rot.y);
+    f32 zFront = effect1 * sin(rot.x) * sin(rot.y);
     front = vec3(
             cos(rot.x) * sin(rot.y),
             sin(rot.x),
