@@ -218,12 +218,8 @@ void onDraw() {
         if (selected) {
             M = scale(M, vec3(1.1));
 
-            if (GLFW_PRESS == glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
+            if (heldBottle == -1 && GLFW_PRESS == glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
                 heldBottle = i;
-                if (camera.effect1 < 1) {
-                    camera.effect1 += 0.05;
-                }
-                dprintf("%.2f%\n", camera.effect1*100);
             }
         }
 
@@ -252,6 +248,8 @@ void onDraw() {
             bottle.shouldDraw = false;
             heldBottle = -1;
             animationAngle = 0;
+            camera.effect1 += 0.05;
+            dprintf("%.2f%\n", camera.effect1*100);
         }
     }
 
