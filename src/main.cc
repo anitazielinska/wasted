@@ -1,5 +1,6 @@
 #include "util.hh"
 #include "engine.hh"
+#include <cmath>
 
 //using namespace std;
 using std :: cout;
@@ -15,6 +16,7 @@ f32 movementSpeed = 10.0;
 
 bool mouseLocked = false;
 bool objectChosen = false;
+int selectedObject = -1;
 f32 mouseSpeed = 0.001;
 f32 mouseWheel = 0.0;
 
@@ -35,8 +37,10 @@ Model cube("res/models/cube/cube.obj");
 Model testCube("res/models/cube/cube.obj");
 Model bottle("res/models/poly/Beer.obj");
 Model bar("res/models/bar/Bar.obj");
+vector <Model> bottles;
 
 f32 cubeAngle = 0;
+f32 animationAngle = 0;
 
 
 Program flatShader("res/shaders/flat_v.glsl", "res/shaders/flat_f.glsl");
@@ -62,6 +66,7 @@ void unlockMouse() {
 void lockMouse() {
 	if (mouseLocked) return;
 	mouseLocked = true;
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 	//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 	centerMouse();
 }
@@ -136,7 +141,7 @@ void onUpdate(f32 dt) {
 
     //dprintf("pos: (x: %.2f, y: %.2f, z: %.2f)\n", camera.pos.x, camera.pos.y, camera.pos.z);
 
-	if (objectChosen) cubeAngle += 0.01;
+	//if (objectChosen) cubeAngle += 0.01;
 
 	FoV = initialFoV - 5 * mouseWheel;
 	P = perspective(radians(FoV), aspectRatio, 1.0f, 500.0f);
@@ -144,7 +149,6 @@ void onUpdate(f32 dt) {
 }
 
 // ----------------------------------------------------------------------------
-
 void onDraw() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -177,15 +181,32 @@ void onDraw() {
         cube.draw(flatShader);
     }
 
+    for (int i = 0; i < bottles.size(); i++)
     {
         mat4 M(1.0);
-        M = translate(M, vec3(-8, 8, -16));
+
+        if (selectedObject == i) {
+            M = translate(M, vec3(camera.pos.x + 1.8 * camera.front.x, camera.pos.y + camera.front.y - 0.8, camera.pos.z + 1.8*camera.front.z));
+            M = scale(M, vec3(0.5, 0.5, 0.5));
+            float a;
+            if (camera.front.x > 0) a = acos(camera.front.z)+PI;
+            else a = acos(-camera.front.z);
+            M = rotate(M, a, vec3(0, 1, 0));
+            M = rotate(M, animationAngle, vec3(1, 0, 0));
+            animationAngle = animationAngle + 0.008;
+            if (animationAngle > 1) {
+                selectedObject = -1;
+                animationAngle = 0;
+            }
+        }
+        else M = translate(M, vec3(-8+i, 8, -7));
+
         glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
-        bottle.draw(flatShader);
+        bottles[i].draw(flatShader);
 
 
-        M = translate(M, bottle.center);
-        M = scale(M, bottle.size);
+        M = translate(M, bottles[i].center);
+        M = scale(M, bottles[i].size);
         vec3 worldMax = M * vec4(testCube.maxCoords, 1);
         vec3 worldMin = M * vec4(testCube.minCoords, 1);
 
@@ -197,6 +218,10 @@ void onDraw() {
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
             testCube.draw(flatShader);
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+                selectedObject = i;
+            }
         }
     }
 
@@ -209,6 +234,7 @@ void onDraw() {
     }
 
 	glfwSwapBuffers(window);
+    cubeAngle += 0.01;
 }
 
 void onInit() {
@@ -223,6 +249,9 @@ void onInit() {
 	testCube.load();
 	bottle.load();
 	bar.load();
+	for (int i = 0; i < 10; i++) {
+	    bottles.push_back(bottle);
+	}
 
 	glBindVertexArray(0);
 }
