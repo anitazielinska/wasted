@@ -121,6 +121,27 @@ void reloadShaders() {
     phongShader.reload();
 }
 
+bool checkBoundaries(f32 x1, f32 x2, f32 z1, f32 z2){
+    if (camera.pos.x > x1 and camera.pos.x < x2 and camera.pos.z > z1 and camera.pos.z < z2) return true;
+    return false;
+}
+
+
+bool collisionDetection(){
+    if (camera.pos.x > 28 or camera.pos.x < -29 or
+        camera.pos.z > 27 or camera.pos.z < -21 or
+        checkBoundaries(-13, 21.5, -26, -4) or
+        checkBoundaries(-10, 18.5, -4, 0) or
+        checkBoundaries(-26.5, -4, 11.5, 18.5) or
+        checkBoundaries(-20, -13.5, 4, 26) or
+        checkBoundaries(1, 23.5, 10, 19) or
+        checkBoundaries(8.5, 15, 3.5, 25) or
+        checkBoundaries(-20, -8, 13.5, 20.5) or
+        checkBoundaries(6.5, 18.5, 11.5, 21)) return true;
+    return false;
+}
+
+
 void onUpdate(f32 dt) {
     f64 xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
@@ -149,12 +170,18 @@ void onUpdate(f32 dt) {
 
         camera.offsetRight(dx);
         camera.offsetFront(dz);
+
+        if (collisionDetection()){
+        camera.offsetRight(-dx);
+         camera.offsetFront(-dz);
+        }
         //camera.offsetUp(dy);
         if (flyingEnabled) playerHeight += dy;
         camera.pos.y = playerHeight;
     }
 
     //dprintf("rot: (%.2f, %.2f,  %.2f)\n", camera.rot.x, camera.rot.y, camera.rot.z);
+    //dprintf("x: %.2f, y: %.2f,  z: %.2f)\n", camera.pos.x, camera.pos.y, camera.pos.z);
     FoV = initialFoV - 5 * mouseWheel;
     P = perspective(radians(FoV), aspectRatio, 1.0f, 500.0f);
     V = camera.lookAt();
