@@ -1,5 +1,6 @@
 #include "util.hh"
 #include "engine.hh"
+#include <cmath>
 
 //using namespace std;
 using std :: cout;
@@ -15,6 +16,7 @@ f32 movementSpeed = 10.0;
 
 bool mouseLocked = false;
 bool objectChosen = false;
+int selectedObject = -1;
 f32 mouseSpeed = 0.001;
 f32 mouseWheel = 0.0;
 
@@ -36,8 +38,12 @@ Camera camera(vec3(4, 14, 23), vec3(-0.15, -PI, 0));
 Model sky("res/models/skydome/skydome.obj");
 Model cube("res/models/cube/cube.obj");
 Model testCube("res/models/cube/cube.obj");
-Model beer("res/models/poly/Beer.obj");
+Model bottle("res/models/poly/Beer.obj");
 Model bar("res/models/bar/Bar.obj");
+vector <Model> bottles;
+
+f32 cubeAngle = 0;
+f32 animationAngle = 0;
 
 Program flatShader("res/shaders/flat_v.glsl", "res/shaders/flat_f.glsl");
 Program phongShader("res/shaders/phong_v.glsl", "res/shaders/phong_f.glsl");
@@ -52,7 +58,7 @@ struct Bottle {
         model(model), origin(origin) {}
 };
 
-vector<Bottle> bottles;
+//vector<Bottle> bottles;
 i32 heldBottle = -1;
 
 mat4 P, V, M;
@@ -159,7 +165,6 @@ void onUpdate(f32 dt) {
 }
 
 // ----------------------------------------------------------------------------
-
 void onDraw() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -192,18 +197,44 @@ void onDraw() {
         cube.draw(flatShader);
     }
 
-    for (i32 i = 0; i < bottles.size(); i++) {
-        if (i == heldBottle) continue;
-        Bottle &bottle = bottles[i];
-        if (!bottle.shouldDraw) continue;
-        Model &model = *bottle.model;
 
+    for (int i = 0; i < bottles.size(); i++) {
         mat4 M(1.0);
-        M = translate(M, bottle.origin);
-        //M = translate(M, model.center);
-        //M = scale(M, model.size);
-        vec3 worldMax = M * vec4(model.maxCoords, 1);
-        vec3 worldMin = M * vec4(model.minCoords, 1);
+
+        if (selectedObject == i) {
+            /*
+            M = translate(M, vec3(
+                        camera.pos.x + 1.8 * camera.front.x,
+                        camera.pos.y + camera.front.y - 0.8,
+                        camera.pos.z + 1.8*camera.front.z));
+            */
+
+            M = translate(M, camera.pos + camera.front * vec3(1.8, 1, 1.8));
+            M = translate(M, vec3(0, -0.8, 0));
+
+            M = scale(M, vec3(0.5, 0.5, 0.5));
+            float a;
+            if (camera.front.x > 0) a = acos(camera.front.z)+PI;
+            else a = acos(-camera.front.z);
+            M = rotate(M, a, vec3(0, 1, 0));
+            M = rotate(M, animationAngle, vec3(1, 0, 0));
+            animationAngle = animationAngle + 0.008;
+            if (animationAngle > 1) {
+                selectedObject = -1;
+                animationAngle = 0;
+            }
+        }
+        else {
+            M = translate(M, vec3(-8+i, 8, -7));
+        }
+
+        glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
+        bottles[i].draw(flatShader);
+
+        M = translate(M, bottles[i].center);
+        M = scale(M, bottles[i].size);
+        vec3 worldMax = M * vec4(testCube.maxCoords, 1);
+        vec3 worldMin = M * vec4(testCube.minCoords, 1);
 
         // rysuj bounding box jak patrzymy na obiekt
         if (testAABB(camera.front, worldMin, worldMax)) {
@@ -216,15 +247,22 @@ void onDraw() {
             //bounding box wireframe
             glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
             // glPolygonMode rysuje tylko obwódkę
-            //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            model.draw(flatShader);
-            //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            //
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            testCube.draw(flatShader);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+            if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+                selectedObject = i;
+            }
         }
 
+        /*
         M = mat4(1.0);
         M = translate(M, bottle.origin);
         glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
         bottle.model->draw(flatShader);
+        */
     }
 
     {
@@ -235,6 +273,7 @@ void onDraw() {
         bar.draw(flatShader);
     }
 
+    /*
     if (heldBottle != -1) {
         Bottle &bottle = bottles[heldBottle];
         mat4 M(1.0);
@@ -249,9 +288,10 @@ void onDraw() {
             heldBottle = -1;
         }
     }
-
+    */
 
     glfwSwapBuffers(window);
+    cubeAngle += 0.01;
 }
 
 void onInit() {
@@ -264,11 +304,14 @@ void onInit() {
     sky.load();
     cube.load();
     testCube.load();
-    beer.load();
+    bottle.load();
     bar.load();
+    for (int i = 0; i < 10; i++) {
+        bottles.push_back(bottle);
+    }
 
-    bottles.push_back(Bottle(&beer, vec3(-8, 8, -16)));
-    bottles.push_back(Bottle(&beer, vec3(-10, 8, -16)));
+    //bottles.push_back(Bottle(&beer, vec3(-8, 8, -16)));
+    //bottles.push_back(Bottle(&beer, vec3(-10, 8, -16)));
 
     glBindVertexArray(0);
 }
@@ -277,8 +320,8 @@ void onExit() {
     flatShader.unload();
     phongShader.unload();
     sky.unload();
-    beer.unload();
-    cube.unload();
+    bottle.unload();
+    bottle.unload();
     testCube.unload();
 }
 

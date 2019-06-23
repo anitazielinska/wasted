@@ -104,6 +104,7 @@ struct Model {
 struct Camera {
     // rot.x: pitch, rot.y: yaw, rot.z: roll (roll not implemented)
     vec3 pos, rot, front, up, right, world;
+    i32 effect;
 
     Camera(vec3 pos, vec3 rot): pos(pos), rot(rot) {
         world = vec3(0, 1, 0);
