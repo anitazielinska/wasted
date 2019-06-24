@@ -37,7 +37,9 @@ Camera camera(vec3(4, 14, 23), vec3(-0.15, -PI, 0));
 Model sky("res/models/skydome/skydome.obj");
 Model cube("res/models/cube/cube.obj");
 Model testCube("res/models/cube/cube.obj");
-Model beer("res/models/poly/Beer.obj");
+Model beerCan("res/models/poly/Beer.obj");
+Model beerBottle("res/models/beer/BeerBottle.obj");
+Model wineBottle("res/models/wine/Wine.obj");
 Model bar("res/models/bar/Bar.obj");
 
 f32 animationAngle = 0;
@@ -48,10 +50,11 @@ Program phongShader("res/shaders/phong_v.glsl", "res/shaders/phong_f.glsl");
 struct Bottle {
     Model *model;
     vec3 origin;
+    vec3 scale;
     bool shouldDraw = true;
 
-    Bottle(Model *model, vec3 origin):
-        model(model), origin(origin) {}
+    Bottle(Model *model, vec3 origin, vec3 scale):
+        model(model), origin(origin), scale(scale) {}
 };
 
 vector<Bottle> bottles;
@@ -237,6 +240,7 @@ void onDraw() {
 
         mat4 M(1.0);
         M = translate(M, bottle.origin);
+        M = scale(M, bottle.scale);
 
         vec3 worldMax = M * vec4(model.maxCoords, 1);
         vec3 worldMin = M * vec4(model.minCoords, 1);
@@ -262,6 +266,7 @@ void onDraw() {
         M = translate(M, camera.pos + camera.front * vec3(1.8, 1, 1.8));
         M = translate(M, vec3(0, -0.8, 0));
         M = scale(M, vec3(0.5));
+        M = scale(M, bottle.scale);
 
         f32 a = camera.rot.y + PI;
         M = rotate(M, a, vec3(0, 1, 0));
@@ -293,12 +298,24 @@ void onInit() {
     sky.load();
     cube.load();
     testCube.load();
-    beer.load();
+    beerCan.load();
+    beerBottle.load();
+    wineBottle.load();
     bar.load();
 
-    for (int i = 0; i < 10; i++) {
-        bottles.push_back(Bottle(&beer, vec3(-8+i, 8, -7)));
+    for (int i = 0; i < 5; i++) {
+        bottles.push_back(Bottle(&beerBottle, vec3(-8+i, 8, -7), vec3(10, 10, 10)));
     }
+
+    for (int i = 0; i < 5; i++) {
+        bottles.push_back(Bottle(&beerCan, vec3(-3+i, 8, -7), vec3(1.0)));
+    }
+
+    for (int i = 0; i < 5; i++) {
+        bottles.push_back(Bottle(&wineBottle, vec3(2+i, 8, -7), vec3(0.01, 0.01, 0.01)));
+    }
+
+
 
     glBindVertexArray(0);
 }
@@ -307,7 +324,9 @@ void onExit() {
     flatShader.unload();
     phongShader.unload();
     sky.unload();
-    beer.unload();
+    beerCan.unload();
+    beerBottle.unload();
+    wineBottle.unload();
     testCube.unload();
 }
 
