@@ -1,15 +1,16 @@
 #include "util.hh"
 #include "engine.hh"
-#include "json.hpp"
 #include <cmath>
-#include <utility>
 
 //using namespace std;
-using std::cout;
-using std::endl;
-using std::pair;
-using std::map;
 using namespace glm;
+
+u32 KEY_DIR_U = GLFW_KEY_W;
+u32 KEY_DIR_L = GLFW_KEY_A;
+u32 KEY_DIR_D = GLFW_KEY_S;
+u32 KEY_DIR_R = GLFW_KEY_D;
+u32 KEY_FLY_U = GLFW_KEY_SPACE;
+u32 KEY_FLY_D = GLFW_KEY_LEFT_SHIFT;
 
 i32 windowWidth = 1024, windowHeight = 720;
 f32 aspectRatio = (f32) windowWidth / windowHeight;
@@ -19,7 +20,9 @@ f32 initialFoV = 60.0;
 f32 movementSpeed = 10.0;
 
 bool mouseLocked = false;
-bool objectChosen = false;
+bool flyingEnabled = false;
+bool drinking = false;
+
 f32 mouseSpeed = 0.001;
 f32 mouseWheel = 0.0;
 f32 lastMouseWheel = mouseWheel;
@@ -27,34 +30,14 @@ f32 lastMouseWheel = mouseWheel;
 f64 mouseRX = 0.0;
 f64 mouseLimitRX = 1.4;
 
-bool flyingEnabled = false;
+f32 animationAngle = 0;
+f32 clickDelayMax = 1.0;
+f32 clickDelay = clickDelayMax;
+f32 FoV;
+
 f32 playerHeight = 14;
 
-u32 KEY_DIR_U = GLFW_KEY_W;
-u32 KEY_DIR_L = GLFW_KEY_A;
-u32 KEY_DIR_D = GLFW_KEY_S;
-u32 KEY_DIR_R = GLFW_KEY_D;
-u32 KEY_FLY_U = GLFW_KEY_SPACE;
-u32 KEY_FLY_D = GLFW_KEY_LEFT_SHIFT;
-
 Camera camera(vec3(4, 14, 23), vec3(-0.15, -PI, 0));
-
-struct Object {
-    Model *model;
-    Program *shader;
-
-    vec3 origin = vec3(0.0);
-    f32 scale = 1.0;
-    f32 rotation = 0.0;
-
-    bool visible = true;
-    bool selectable = true;
-    bool drinkable = false;
-};
-
-map<string, Program*> shaders;
-map<string, Model*> models;
-vector<Object*> objects;
 
 Model sky("res/models/skydome/skydome.obj");
 Model cube("res/models/cube/cube.obj");
@@ -62,15 +45,10 @@ Model cube("res/models/cube/cube.obj");
 Object *heldObject = nullptr;
 //Object *heldBottle = nullptr;
 
-f32 animationAngle = 0;
-f32 clickDelayMax = 1.0;
-f32 clickDelay = clickDelayMax;
-
+Scene scene;
 mat4 P, V;
-f32 FoV;
 
 // ----------------------------------------------------------------------------
-
 
 bool didClick(f32 dt, u32 button) {
     if (clickDelay > 0) {
@@ -105,33 +83,6 @@ void lockMouse() {
     centerMouse();
 }
 
-bool testAABB(vec3 ray, vec3 worldMin, vec3 worldMax) {
-    using std::max;
-    using std::min;
-
-    ray = 1.0f / ray;
-    f32 t1 = (worldMin.x - camera.pos.x) * ray.x;
-    f32 t2 = (worldMax.x - camera.pos.x) * ray.x;
-    f32 t3 = (worldMin.y - camera.pos.y) * ray.y;
-    f32 t4 = (worldMax.y - camera.pos.y) * ray.y;
-    f32 t5 = (worldMin.z - camera.pos.z) * ray.z;
-    f32 t6 = (worldMax.z - camera.pos.z) * ray.z;
-
-    f32 tMin = max(max(min(t1, t2), min(t3, t4)), min(t5, t6));
-    f32 tMax = min(min(max(t1, t2), max(t3, t4)), max(t5, t6));
-
-    // if tmax < 0, ray (line) is intersecting AABB, but the whole AABB is behind us, or
-    // if tmin > tmax, ray doesn't intersect AABB
-    //f32 minDistance;
-    if (tMax < 0 || tMin > tMax) {
-        //minDistance = tMax;
-        return false;
-    } else {
-        //minDistance = tMin;
-        return true;
-    }
-}
-
 void toggleFlying() {
     flyingEnabled = !flyingEnabled;
     if (flyingEnabled)
@@ -141,9 +92,7 @@ void toggleFlying() {
 }
 
 void reloadShaders() {
-    for (auto const& [k, v] : shaders) {
-        v->reload();
-    }
+    for (auto& [k, v] : scene.shaders) v->reload();
 }
 
 bool checkBoundaries(f32 x1, f32 x2, f32 z1, f32 z2){
@@ -223,13 +172,11 @@ void onUpdate(f32 dt) {
 
 // ----------------------------------------------------------------------------
 
-bool drinking = false;
-
 void onDraw(f32 dt) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     {
-        Program &shader = *shaders["sky"];
+        Program &shader = *scene.shaders["sky"];
         glUseProgram(shader.id);
         mat4 M(1.0);
         M = translate(M, camera.pos + vec3(0, -50, 0));
@@ -252,7 +199,7 @@ void onDraw(f32 dt) {
         mat4 M(1.0);
         M = scale(M, vec3(62, 50, 58));
 
-        Program &shader = *shaders["phong+mat"];
+        Program &shader = *scene.shaders["phong+mat"];
         glUseProgram(shader.id);
         glUniformMatrix4fv(shader.u("P"), 1, false, value_ptr(P));
         glUniformMatrix4fv(shader.u("V"), 1, false, value_ptr(V));
@@ -261,52 +208,12 @@ void onDraw(f32 dt) {
         cube.draw(shader);
     }
 
-    /*
-    for (i32 i = 0; i < (i32) bottles.size(); i++) {
-        if (heldBottle == i) continue;
-
-        Object &object = bottles[i];
-        Model &model = *object.model;
-
-        if (!object.visible) continue;
-
-        mat4 M(1.0);
-        M = translate(M, object.origin);
-        M = scale(M, object.scale);
-
-        vec3 worldMax = M * vec4(model.maxCoords, 1);
-        vec3 worldMin = M * vec4(model.minCoords, 1);
-        bool selected = testAABB(camera.front, worldMin, worldMax) &&
-            glm::length(camera.pos - object.origin) < 15;
-
-        if (selected && heldBottle == -1) {
-            M = scale(M, vec3(1.1));
-
-
-            if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) {
-                heldBottle = i;
-            }
-        }
-
-        glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
-        model.draw(prog);
-    }
-    */
-
-
-    for (i32 i = 0; i < (i32) objects.size(); i++) {
-        if (objects[i] == heldObject) continue;
-        Object &object = *objects[i];
+    for (Object *objectPtr : scene.objects) {
+        if (objectPtr == heldObject) continue;
+        Object &object = *objectPtr;
         if (!object.visible) continue;
         Model &model = *object.model;
         Program &shader = *object.shader;
-
-        glUseProgram(shader.id);
-        glUniformMatrix4fv(shader.u("P"), 1, false, value_ptr(P));
-        glUniformMatrix4fv(shader.u("V"), 1, false, value_ptr(V));
-        glUniformMatrix4fv(shader.u("E"), 1, false, value_ptr(camera.pos));
-
-        //dprintf("draw object %i\n", i);
 
         mat4 M(1.0);
         M = translate(M, object.origin);
@@ -316,13 +223,13 @@ void onDraw(f32 dt) {
         if (!heldObject && object.selectable) {
             vec3 worldMax = M * vec4(model.maxCoords, 1);
             vec3 worldMin = M * vec4(model.minCoords, 1);
-            bool selected = testAABB(camera.front, worldMin, worldMax) &&
+            bool selected = testAABB(camera.pos, camera.front, worldMin, worldMax) &&
                 length(camera.pos - object.origin) < 15;
 
             if (selected) {
                 M = scale(M, vec3(1.1));
 
-                if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) heldObject = objects[i];
+                if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) heldObject = objectPtr;
 
                 if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
                     dprintf("o: (%.2f %.2f %.2f), s: (%.2f), r: (0 %.2f 0)\n",
@@ -331,6 +238,10 @@ void onDraw(f32 dt) {
             }
         }
 
+        glUseProgram(shader.id);
+        glUniformMatrix4fv(shader.u("P"), 1, false, value_ptr(P));
+        glUniformMatrix4fv(shader.u("V"), 1, false, value_ptr(V));
+        glUniformMatrix4fv(shader.u("E"), 1, false, value_ptr(camera.pos));
         glUniformMatrix4fv(shader.u("M"), 1, false, value_ptr(M));
         model.draw(shader);
     }
@@ -368,21 +279,19 @@ void onDraw(f32 dt) {
                 object.visible = false;
                 heldObject = nullptr;
                 camera.effect1 += 0.05;
-                //dprintf("%.2f%%\n", camera.effect1*100);
                 drinking = false;
+                //dprintf("%.2f%%\n", camera.effect1*100);
             }
         } else {
-
             //M = rotate(M, camera.rot.x, vec3(1, 0, 0));
 
             if (!drinking && didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) {
                 heldObject = nullptr;
             }
 
-            if (didClick(dt, GLFW_MOUSE_BUTTON_RIGHT)) {
+            if (object.drinkable && didClick(dt, GLFW_MOUSE_BUTTON_RIGHT)) {
                 drinking = true;
             }
-
         }
 
         glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
@@ -392,127 +301,19 @@ void onDraw(f32 dt) {
     glfwSwapBuffers(window);
 }
 
-using nlohmann::json;
-using std::cerr;
-#include <fstream>
-#include <iomanip>
-#include <sstream>
-
-string encodeFloat(f32 x) {
-    std::ostringstream s;
-    s << std::fixed << std::setprecision(2) << x;
-    return s.str();
-}
-
-f32 decodeFloat(json x) {
-    return std::stof(x.get<string>());
-}
-
-vector<string> encodeVec3(vec3 x) {
-    //return vector<i32>({ (i32) (x.x*PREC), (i32) (x.y * PREC), (i32) (x.z * PREC) });
-    return {encodeFloat(x.x), encodeFloat(x.y), encodeFloat(x.z)};
-}
-
-vec3 decodeVec3(json x) {
-    //return vec3((f32) x[0] / PREC, (f32) x[1] / PREC, (f32) x[2] / PREC);
-    return vec3(decodeFloat(x[0]), decodeFloat(x[1]), decodeFloat(x[2]));
-}
-
-
-void saveScene(const string &path) {
-    dprintf("saving scene to %s\n", path.c_str());
-
-    json j;
-
-    for (auto& [k, v] : shaders) {
-        j["shaders"][k]["vs"] = v->vs;
-        j["shaders"][k]["fs"] = v->fs;
-    }
-
-    for (auto& [k, v] : models) {
-        j["models"][k] = v->path;
-    }
-
-    for (auto& x : objects) {
-        json o;
-        o["model"] = x->model->key;
-        o["shader"] = x->shader->key;
-        o["origin"] = encodeVec3(x->origin);
-        o["scale"] = encodeFloat(x->scale);
-        o["rotation"] = encodeFloat(x->rotation);
-        o["selectable"] = x->selectable;
-        o["drinkable"] = x->drinkable;
-        j["objects"].push_back(o);
-    }
-
-    std::ofstream file(path);
-    file.precision(4);
-    file << std::setw(4) << j << endl;
-}
-
-void loadScene(const string &path) {
-    dprintf("loading scene from %s\n", path.c_str());
-
-    std::ifstream file(path);
-    json j;
-    file >> j;
-
-    for (auto& [k, v] : j["shaders"].items()) {
-        Program *x = new Program(v["vs"], v["fs"]);
-        x->key = k;
-        shaders.insert({k, x});
-    }
-
-    for (auto& [k, v] : j["models"].items()) {
-        Model *x = new Model(v);
-        x->key = k;
-        models.insert({k, x});
-    }
-
-    for (auto& v : j["objects"]) {
-        Object *x = new Object;
-
-        x->shader = shaders[v["shader"]];
-        x->model = models[v["model"]];
-        x->origin = decodeVec3(v["origin"]);
-
-        if (v.count("rotation") == 1) x->rotation = decodeFloat(v["rotation"]);
-        if (v.count("scale") == 1) x->scale = decodeFloat(v["scale"]);
-
-        if (v.count("selectable") == 1) x->selectable = v["selectable"].get<bool>();
-        if (v.count("drinkable") == 1) x->drinkable = v["drinkable"].get<bool>();
-
-        objects.push_back(x);
-    }
-}
-
 void onInit() {
     glClearColor(1.0, 1.0, 1.0, 0.0);
     glEnable(GL_DEPTH_TEST);
     //glEnable(GL_CULL);
-
-    loadScene("res/scenes/bar.json");
-
-    for (auto const& [k, v] : shaders) v->load();
-    for (auto const& [k, v] : models) v->load();
-
+    scene.read("res/scenes/bar.json");
+    scene.load();
     sky.load();
     cube.load();
-
     glBindVertexArray(0);
 }
 
 void onExit() {
-    for (auto& [k, v] : models) {
-        v->unload();
-        delete v;
-    }
-
-    for (auto& [k, v] : shaders) {
-        v->unload();
-        delete v;
-    }
-
+    scene.unload();
     sky.unload();
     cube.unload();
 }
@@ -545,10 +346,7 @@ void onKeyboard(Window *window, i32 key, i32 code, i32 action, i32 mods) {
         if (key == GLFW_KEY_M) toggleFlying();
         if (key == GLFW_KEY_R) reloadShaders();
         if (key == GLFW_KEY_P) dprintf("pos: (%.2f %.2f %.2f)\n", camera.pos.x, camera.pos.y, camera.pos.z);
-        if (key == GLFW_KEY_J) saveScene("res/scenes/bar.json");
-        if (key == GLFW_KEY_O) {
-        }
-
+        if (key == GLFW_KEY_J) scene.save("res/scenes/bar.json");
     }
 }
 

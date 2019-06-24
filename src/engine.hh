@@ -13,6 +13,7 @@ struct Material;
 struct Texture;
 
 void printModel(Model &model);
+bool testAABB(vec3 org, vec3 ray, vec3 wMin, vec3 wMax);
 
 struct Shader {
     u32 id = 0;
@@ -123,5 +124,29 @@ struct Camera {
     void offsetUp(f32 delta)    { pos += world * delta; }
     void offsetPitch(f32 delta) { rot.x += delta; update(); }
     void offsetYaw(f32 delta)   { rot.y += delta; update(); }
+};
+
+struct Object {
+    Model *model;
+    Program *shader;
+
+    vec3 origin = vec3(0.0);
+    f32 scale = 1.0;
+    f32 rotation = 0.0;
+
+    bool visible = true;
+    bool selectable = true;
+    bool drinkable = false;
+};
+
+struct Scene {
+    map<string, Program*> shaders;
+    map<string, Model*> models;
+    vector<Object*> objects;
+
+    void read(const string &path);
+    void save(const string &path);
+    void load();
+    void unload();
 };
 

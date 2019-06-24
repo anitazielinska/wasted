@@ -4,8 +4,11 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
+#include "json.hpp"
+
 using namespace std;
 using namespace glm;
+using nlohmann::json;
 
 // -----------------------------------------------
 
@@ -391,5 +394,141 @@ void Program::unload() {
 void Program::reload() {
     unload();
     load();
+}
+
+// -----------------------------------------------
+
+string encodeFloat(f32 x) {
+    std::ostringstream s;
+    s << std::fixed << std::setprecision(2) << x;
+    return s.str();
+}
+
+f32 decodeFloat(json x) {
+    return std::stof(x.get<string>());
+}
+
+vector<string> encodeVec3(vec3 x) {
+    //return vector<i32>({ (i32) (x.x*PREC), (i32) (x.y * PREC), (i32) (x.z * PREC) });
+    return {encodeFloat(x.x), encodeFloat(x.y), encodeFloat(x.z)};
+}
+
+vec3 decodeVec3(json x) {
+    //return vec3((f32) x[0] / PREC, (f32) x[1] / PREC, (f32) x[2] / PREC);
+    return vec3(decodeFloat(x[0]), decodeFloat(x[1]), decodeFloat(x[2]));
+}
+
+
+void Scene::save(const string &path) {
+    dprintf("saving scene to %s\n", path.c_str());
+
+    json j;
+
+    for (auto& [k, v] : shaders) {
+        j["shaders"][k]["vs"] = v->vs;
+        j["shaders"][k]["fs"] = v->fs;
+    }
+
+    for (auto& [k, v] : models) {
+        j["models"][k] = v->path;
+    }
+
+    for (auto& x : objects) {
+        json o;
+        o["model"] = x->model->key;
+        o["shader"] = x->shader->key;
+        o["origin"] = encodeVec3(x->origin);
+        o["scale"] = encodeFloat(x->scale);
+        o["rotation"] = encodeFloat(x->rotation);
+        o["selectable"] = x->selectable;
+        o["drinkable"] = x->drinkable;
+        j["objects"].push_back(o);
+    }
+
+    std::ofstream file(path);
+    file.precision(4);
+    file << std::setw(4) << j << endl;
+}
+
+void Scene::read(const string &path) {
+    dprintf("loading scene from %s\n", path.c_str());
+
+    std::ifstream file(path);
+    json j;
+    file >> j;
+
+    for (auto& [k, v] : j["shaders"].items()) {
+        Program *x = new Program(v["vs"], v["fs"]);
+        x->key = k;
+        shaders.insert({k, x});
+    }
+
+    for (auto& [k, v] : j["models"].items()) {
+        Model *x = new Model(v);
+        x->key = k;
+        models.insert({k, x});
+    }
+
+    for (auto& v : j["objects"]) {
+        Object *x = new Object;
+
+        x->shader = shaders[v["shader"]];
+        x->model = models[v["model"]];
+        x->origin = decodeVec3(v["origin"]);
+
+        if (v.count("rotation") == 1) x->rotation = decodeFloat(v["rotation"]);
+        if (v.count("scale") == 1) x->scale = decodeFloat(v["scale"]);
+
+        if (v.count("selectable") == 1) x->selectable = v["selectable"].get<bool>();
+        if (v.count("drinkable") == 1) x->drinkable = v["drinkable"].get<bool>();
+
+        objects.push_back(x);
+    }
+}
+
+void Scene::load() {
+    for (auto& [k, v] : shaders) v->load();
+    for (auto& [k, v] : models) v->load();
+}
+
+void Scene::unload() {
+    for (auto& [k, v] : models) {
+        v->unload();
+        delete v;
+    }
+
+    for (auto& [k, v] : shaders) {
+        v->unload();
+        delete v;
+    }
+}
+
+// -----------------------------------------------
+
+bool testAABB(vec3 org, vec3 ray, vec3 wMin, vec3 wMax) {
+    using std::max;
+    using std::min;
+
+    ray = 1.0f / ray;
+    f32 t1 = (wMin.x - org.x) * ray.x;
+    f32 t2 = (wMax.x - org.x) * ray.x;
+    f32 t3 = (wMin.y - org.y) * ray.y;
+    f32 t4 = (wMax.y - org.y) * ray.y;
+    f32 t5 = (wMin.z - org.z) * ray.z;
+    f32 t6 = (wMax.z - org.z) * ray.z;
+
+    f32 tMin = max(max(min(t1, t2), min(t3, t4)), min(t5, t6));
+    f32 tMax = min(min(max(t1, t2), max(t3, t4)), max(t5, t6));
+
+    // if tmax < 0, ray (line) is intersecting AABB, but the whole AABB is behind us, or
+    // if tmin > tmax, ray doesn't intersect AABB
+    //f32 minDistance;
+    if (tMax < 0 || tMin > tMax) {
+        //minDistance = tMax;
+        return false;
+    } else {
+        //minDistance = tMin;
+        return true;
+    }
 }
 

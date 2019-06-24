@@ -4,8 +4,14 @@
 #include <cstdint>
 
 #include <iostream>
-#include <vector>
+#include <fstream>
+#include <sstream>
+#include <iomanip>
+
 #include <string>
+#include <vector>
+#include <map>
+
 #include <memory>
 #include <algorithm>
 
@@ -35,10 +41,14 @@
 #define dprintf(f_, ...)
 #endif
 
+using std::cerr;
+using std::cout;
+using std::endl;
 using std::string;
+using std::vector;
+using std::map;
 using std::shared_ptr;
 using std::weak_ptr;
-using std::vector;
 using glm::mat4;
 using glm::vec4;
 using glm::vec3;
