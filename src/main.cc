@@ -18,6 +18,7 @@ bool mouseLocked = false;
 bool objectChosen = false;
 f32 mouseSpeed = 0.001;
 f32 mouseWheel = 0.0;
+f32 lastMouseWheel = mouseWheel;
 
 f64 mouseRX = 0.0;
 f64 mouseLimitRX = 1.4;
@@ -49,7 +50,9 @@ Model plant("res/models/poly/plant.obj");
 Model lamp("res/models/poly/Standing_lamp_01.obj");
 Model lamp2("res/models/poly/lantern.obj");
 
-Model beer("res/models/poly/beer.obj");
+Model beerCan("res/models/poly/beer.obj");
+Model beerBottle("res/models/beer/BeerBottle.obj");
+Model wineBottle("res/models/wine/Wine.obj");
 Model beers("res/models/poly/beer_flight.obj");
 Model bottle1("res/models/poly/bottle1.obj");
 Model bottle2("res/models/poly/bottle2.obj");
@@ -63,7 +66,7 @@ vector<Program*> programs({
 
 vector<Model*> models({
     &sky, &cube, &testCube, &suit, &bar, &lamp, &lamp2, &plant, &player,
-    &beer, &beers, &bottle1, &bottle2, &bottle3, &bottle4, &bottle5
+    &beerCan, &beerBottle, &wineBottle, &beers, &bottle1, &bottle2, &bottle3, &bottle4, &bottle5
 });
 
 struct Object {
@@ -77,6 +80,7 @@ struct Object {
     Object(Model *model, vec3 origin, vec3 scale = vec3(1.0), bool selectable = false):
         model(model), origin(origin), scale(scale), selectable(selectable) {}
 };
+
 
 vector<Object> objects;
 vector<Object> bottles;
@@ -170,7 +174,25 @@ void reloadShaders() {
     }
 }
 
-f32 lastMouseWheel = mouseWheel;
+bool checkBoundaries(f32 x1, f32 x2, f32 z1, f32 z2){
+    if (camera.pos.x > x1 and camera.pos.x < x2 and camera.pos.z > z1 and camera.pos.z < z2) return true;
+    return false;
+}
+
+
+bool collisionDetection(){
+    if (camera.pos.x > 28 or camera.pos.x < -29 or
+        camera.pos.z > 27 or camera.pos.z < -21 or
+        checkBoundaries(-13, 21.5, -26, -4) or
+        checkBoundaries(-10, 18.5, -4, 0) or
+        checkBoundaries(-26.5, -4, 11.5, 18.5) or
+        checkBoundaries(-20, -13.5, 4, 26) or
+        checkBoundaries(1, 23.5, 10, 19) or
+        checkBoundaries(8.5, 15, 3.5, 25) or
+        checkBoundaries(-20, -8, 13.5, 20.5) or
+        checkBoundaries(6.5, 18.5, 11.5, 21)) return true;
+    return false;
+}
 
 void onUpdate(f32 dt) {
     f64 xpos, ypos;
@@ -199,6 +221,11 @@ void onUpdate(f32 dt) {
 
         camera.offsetRight(dx);
         camera.offsetFront(dz);
+
+        if (collisionDetection()) {
+            camera.offsetRight(-dx);
+            camera.offsetFront(-dz);
+        }
         //camera.offsetUp(dy);
         if (flyingEnabled) playerHeight += dy;
         camera.pos.y = playerHeight;
@@ -281,18 +308,19 @@ void onDraw(f32 dt) {
     for (i32 i = 0; i < (i32) bottles.size(); i++) {
         if (heldBottle == i) continue;
 
-        Object &bottle = bottles[i];
-        Model &model = *bottle.model;
+        Object &object = bottles[i];
+        Model &model = *object.model;
 
-        if (!bottle.visible) continue;
+        if (!object.visible) continue;
 
         mat4 M(1.0);
-        M = translate(M, bottle.origin);
+        M = translate(M, object.origin);
+        M = scale(M, object.scale);
 
         vec3 worldMax = M * vec4(model.maxCoords, 1);
         vec3 worldMin = M * vec4(model.minCoords, 1);
         bool selected = testAABB(camera.front, worldMin, worldMax) &&
-            glm::length(camera.pos - bottle.origin) < 15;
+            glm::length(camera.pos - object.origin) < 15;
 
         if (selected && heldBottle == -1) {
             M = scale(M, vec3(1.1));
@@ -308,25 +336,22 @@ void onDraw(f32 dt) {
     }
 
     if (heldBottle != -1) {
-        Object &bottle = bottles[heldBottle];
-        Model &model = *bottle.model;
+        Object &object = bottles[heldBottle];
+        Model &model = *object.model;
+
+        mat4 M(1.0);
+        M = translate(M, camera.pos + camera.front * vec3(1.8, 1, 1.8));
+        M = translate(M, vec3(0, -0.8, 0));
+        M = scale(M, object.scale * 0.5f);
+        M = rotate(M, camera.rot.y + PI, vec3(0, 1, 0));
 
         if (drinking) {
-
-            mat4 M(1.0);
-            M = translate(M, camera.pos + camera.front * vec3(1.8, 1, 1.8));
-            M = translate(M, vec3(0, -0.8, 0));
-            M = scale(M, vec3(0.5));
-            M = rotate(M, camera.rot.y + PI, vec3(0, 1, 0));
             M = rotate(M, animationAngle, vec3(1, 0, 0));
-
-            glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
-            model.draw(prog);
 
             animationAngle += 0.008;
             if (animationAngle > 1) {
                 animationAngle = 0;
-                bottle.visible = false;
+                object.visible = false;
                 heldBottle = -1;
                 camera.effect1 += 0.05;
                 //dprintf("%.2f%%\n", camera.effect1*100);
@@ -334,16 +359,7 @@ void onDraw(f32 dt) {
             }
 
         } else {
-
-            mat4 M(1.0);
-            //M = translate(M, camera.pos + camera.front * vec3(mouseWheel / 10));
-            M = translate(M, camera.pos + camera.front * vec3(2));
-            M = translate(M, vec3(0, -0.8, 0));
-            M = scale(M, vec3(0.5));
-            M = rotate(M, camera.rot.y + PI, vec3(0, 1, 0));
             M = rotate(M, camera.rot.x, vec3(1, 0, 0));
-            glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
-            model.draw(prog);
 
             if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) {
                 drinking = true;
@@ -353,6 +369,9 @@ void onDraw(f32 dt) {
             }
 
         }
+
+        glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
+        model.draw(prog);
     }
 
     for (i32 i = 0; i < (i32) objects.size(); i++) {
@@ -401,10 +420,6 @@ void onInit() {
     for (Program *x : programs) x->load();
     for (Model *x : models) x->load();
 
-    for (i32 i = 0; i < 10; i++) {
-        bottles.push_back(Object(&beer, vec3(-8+i, 8, -7)));
-    }
-
     objects.push_back(Object(&lamp, vec3(25.0, 1.50, -22.5), vec3(1.40)));
     objects.push_back(Object(&lamp, vec3(-16.0, 1.50, -22.5), vec3(1.40)));
 
@@ -415,7 +430,6 @@ void onInit() {
     objects.push_back(Object(&lamp2, vec3(0), vec3(10), true));
     objects.push_back(Object(&plant, vec3(27.35, 1.5, 25.3), vec3(1.6), false));
 
-
     objects.push_back(Object(&player, vec3(0), vec3(10), true));
     objects.push_back(Object(&beers, vec3(0), vec3(5.5), true));
     //objects.push_back(Object(&bottle1, vec3(0), vec3(1), true));
@@ -423,6 +437,18 @@ void onInit() {
     objects.push_back(Object(&bottle3, vec3(0), vec3(1), true));
     //objects.push_back(Object(&bottle4, vec3(0), vec3(1), true));
     objects.push_back(Object(&bottle5, vec3(0), vec3(1), true));
+
+    for (int i = 0; i < 5; i++) {
+        bottles.push_back(Object(&beerBottle, vec3(-8+i, 8, -7), vec3(10)));
+    }
+
+    for (int i = 0; i < 5; i++) {
+        bottles.push_back(Object(&beerCan, vec3(-3+i, 8, -7), vec3(1.0)));
+    }
+
+    for (int i = 0; i < 5; i++) {
+        bottles.push_back(Object(&wineBottle, vec3(2+i, 8, -7), vec3(0.01)));
+    }
 
     glBindVertexArray(0);
 }
