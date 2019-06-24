@@ -16,7 +16,7 @@ i32 windowWidth = 1024, windowHeight = 720;
 f32 aspectRatio = (f32) windowWidth / windowHeight;
 Window *window;
 
-f32 initialFoV = 60.0;
+f32 FoV = 60.0;
 f32 movementSpeed = 10.0;
 
 bool mouseLocked = false;
@@ -33,7 +33,6 @@ f64 mouseLimitRX = 1.4;
 f32 animationAngle = 0;
 f32 clickDelayMax = 1.0;
 f32 clickDelay = clickDelayMax;
-f32 FoV;
 
 f32 playerHeight = 14;
 
@@ -115,6 +114,9 @@ bool collisionDetection(){
         || checkBoundaries(6.5, 18.5, 11.5, 21);
 }
 
+f32 camAnim = 0.0;
+f32 drunk = 0.0; // [0, 1]
+
 void onUpdate(f32 dt) {
     f64 xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
@@ -129,16 +131,26 @@ void onUpdate(f32 dt) {
         }
 
         camera.offsetYaw(dry);
+
     }
 
     {
+        f32 slowdown = drunk * movementSpeed * 0.5;
+        f32 slalom = drunk * 0.05 * sin(camAnim);
+
+        f32 speed = movementSpeed - slowdown;
+
         f32 dx = 0, dy = 0, dz = 0;
-        if (glfwGetKey(window, KEY_DIR_U) == GLFW_PRESS) dz += dt * movementSpeed;
-        if (glfwGetKey(window, KEY_DIR_D) == GLFW_PRESS) dz -= dt * movementSpeed;
-        if (glfwGetKey(window, KEY_DIR_R) == GLFW_PRESS) dx += dt * movementSpeed;
-        if (glfwGetKey(window, KEY_DIR_L) == GLFW_PRESS) dx -= dt * movementSpeed;
-        if (glfwGetKey(window, KEY_FLY_U) == GLFW_PRESS) dy += dt * movementSpeed;
-        if (glfwGetKey(window, KEY_FLY_D) == GLFW_PRESS) dy -= dt * movementSpeed;
+        if (glfwGetKey(window, KEY_DIR_U) == GLFW_PRESS) dz += dt * speed;
+        if (glfwGetKey(window, KEY_DIR_D) == GLFW_PRESS) dz -= dt * speed;
+        if (glfwGetKey(window, KEY_DIR_R) == GLFW_PRESS) dx += dt * speed;
+        if (glfwGetKey(window, KEY_DIR_L) == GLFW_PRESS) dx -= dt * speed;
+        if (glfwGetKey(window, KEY_FLY_U) == GLFW_PRESS) dy += dt * speed;
+        if (glfwGetKey(window, KEY_FLY_D) == GLFW_PRESS) dy -= dt * speed;
+
+        if (dz > 0) {
+            dx += slalom;
+        }
 
         camera.offsetRight(dx);
         camera.offsetFront(dz);
@@ -165,9 +177,18 @@ void onUpdate(f32 dt) {
     clickDelay -= dt;
 
     //dprintf("rot: (%.2f, %.2f,  %.2f)\n", camera.rot.x, camera.rot.y, camera.rot.z);
-    FoV = initialFoV;
-    P = perspective(radians(FoV), aspectRatio, 1.0f, 500.0f);
-    V = camera.lookAt();
+
+
+
+    //camera.offsetPitch((sin(camAnim)) * 0.01);
+    //camera.offsetYaw((sin(camAnim)) * 0.01);
+
+    f32 pulse = drunk * 10 * sin(camAnim);
+    vec3 swirl = drunk * 0.1f * vec3(sin(camAnim));
+    camAnim += dt;
+
+    P = perspective(radians(FoV + pulse), aspectRatio, 1.0f, 500.0f);
+    V = lookAt(camera.pos, camera.pos + camera.front + swirl, camera.up);
 }
 
 // ----------------------------------------------------------------------------
@@ -278,9 +299,13 @@ void onDraw(f32 dt) {
                 animationAngle = 0;
                 object.visible = false;
                 heldObject = nullptr;
-                camera.effect1 += 0.05;
                 drinking = false;
-                //dprintf("%.2f%%\n", camera.effect1*100);
+                if (drunk >= 1.0) {
+                    dprintf("totally wasted!\n");
+                } else {
+                    drunk += 0.05;
+                    dprintf("drunk = %.2f%%\n", drunk*100);
+                }
             }
         } else {
             //M = rotate(M, camera.rot.x, vec3(1, 0, 0));
@@ -304,7 +329,7 @@ void onDraw(f32 dt) {
 void onInit() {
     glClearColor(1.0, 1.0, 1.0, 0.0);
     glEnable(GL_DEPTH_TEST);
-    //glEnable(GL_CULL);
+    //glEnable(GL_CULL_FACE);
     scene.read("res/scenes/bar.json");
     scene.load();
     sky.load();

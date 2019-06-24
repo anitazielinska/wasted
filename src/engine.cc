@@ -17,13 +17,9 @@ void Camera::update() {
     front = vec3(
             cos(rot.x) * sin(rot.y),
             sin(rot.x),
-            cos(rot.x) * cos(rot.y) + zFront
+            cos(rot.x) * cos(rot.y)
             );
-    right = vec3(
-            sin(rot.y - PI/2),
-            0,
-            cos(rot.y - PI/2)
-            );
+    right = cross(front, world);
     up = cross(right, front);
 }
 
