@@ -12,6 +12,8 @@
         "cube": "res/models/cube/cube.obj",
         "lamp": "res/models/poly/Standing_lamp_01.obj",
         "lamp2": "res/models/poly/lantern.obj",
+        "martini": "res/models/poly/Martini_01.obj",
+        "pinaColada": "res/models/poly/PinaColada.obj",
         "plant": "res/models/poly/plant.obj",
         "player": "res/models/poly/player.obj",
         "sky": "res/models/skydome/skydome.obj",
@@ -102,11 +104,11 @@
             "drinkable": true,
             "model": "beerCan",
             "origin": [
-                "-20.35",
-                "9.30",
-                "-19.21"
+                "-7.90",
+                "7.95",
+                "-11.27"
             ],
-            "rotation": "-6.30",
+            "rotation": "-0.19",
             "scale": "1.00",
             "selectable": true,
             "shader": "phong+tex"
@@ -329,6 +331,58 @@
             ],
             "rotation": "2.25",
             "scale": "10.00",
+            "selectable": true,
+            "shader": "phong+tex"
+        },
+        {
+            "drinkable": true,
+            "model": "martini",
+            "origin": [
+                "-6.63",
+                "8.00",
+                "-8.39"
+            ],
+            "rotation": "0.09",
+            "scale": "0.10",
+            "selectable": true,
+            "shader": "phong+mat"
+        },
+        {
+            "drinkable": true,
+            "model": "martini",
+            "origin": [
+                "-7.67",
+                "8.00",
+                "-8.52"
+            ],
+            "rotation": "-0.01",
+            "scale": "0.10",
+            "selectable": true,
+            "shader": "phong+mat"
+        },
+        {
+            "drinkable": true,
+            "model": "pinaColada",
+            "origin": [
+                "-20.03",
+                "9.54",
+                "-18.53"
+            ],
+            "rotation": "0.33",
+            "scale": "1.00",
+            "selectable": true,
+            "shader": "phong+tex"
+        },
+        {
+            "drinkable": true,
+            "model": "pinaColada",
+            "origin": [
+                "-10.36",
+                "7.01",
+                "11.98"
+            ],
+            "rotation": "2.24",
+            "scale": "1.00",
             "selectable": true,
             "shader": "phong+tex"
         },
