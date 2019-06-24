@@ -22,6 +22,7 @@ struct Shader {
 };
 
 struct Program {
+    string key;
     u32 id = 0;
     string vs, fs, gs;
 
@@ -82,6 +83,7 @@ struct Mesh {
 };
 
 struct Model {
+    string key;
     string path;
     vector<Mesh> meshes;
     vector<Material> materials;

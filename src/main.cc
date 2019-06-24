@@ -1,10 +1,14 @@
 #include "util.hh"
 #include "engine.hh"
+#include "json.hpp"
 #include <cmath>
+#include <utility>
 
 //using namespace std;
-using std :: cout;
-using std :: endl;
+using std::cout;
+using std::endl;
+using std::pair;
+using std::map;
 using namespace glm;
 
 i32 windowWidth = 1024, windowHeight = 720;
@@ -23,7 +27,7 @@ f32 lastMouseWheel = mouseWheel;
 f64 mouseRX = 0.0;
 f64 mouseLimitRX = 1.4;
 
-bool flyingEnabled = true;
+bool flyingEnabled = false;
 f32 playerHeight = 14;
 
 u32 KEY_DIR_U = GLFW_KEY_W;
@@ -35,61 +39,28 @@ u32 KEY_FLY_D = GLFW_KEY_LEFT_SHIFT;
 
 Camera camera(vec3(4, 14, 23), vec3(-0.15, -PI, 0));
 
-Program flatShader("res/shaders/flat_v.glsl", "res/shaders/flat_f.glsl");
-Program matShader("res/shaders/mat_v.glsl", "res/shaders/mat_f.glsl");
-Program skyShader("res/shaders/sky_v.glsl", "res/shaders/sky_f.glsl");
-
-Model sky("res/models/skydome/skydome.obj");
-Model suit("res/models/nanosuit/nanosuit.obj");
-Model cube("res/models/cube/cube.obj");
-Model testCube("res/models/cube/cube.obj");
-
-Model bar("res/models/poly/Bar.obj");
-Model player("res/models/poly/player.obj");
-Model plant("res/models/poly/plant.obj");
-Model lamp("res/models/poly/Standing_lamp_01.obj");
-Model lamp2("res/models/poly/lantern.obj");
-
-Model beerCan("res/models/poly/beer.obj");
-Model beerBottle("res/models/beer/BeerBottle.obj");
-Model wineBottle("res/models/wine/Wine.obj");
-Model beers("res/models/poly/beer_flight.obj");
-Model bottle1("res/models/poly/bottle1.obj");
-Model bottle2("res/models/poly/bottle2.obj");
-Model bottle3("res/models/poly/bottle3.obj");
-Model bottle4("res/models/poly/bottle4.obj");
-Model bottle5("res/models/poly/bottle5.obj");
-
-vector<Program*> programs({
-    &flatShader, &matShader, &skyShader
-});
-
-vector<Model*> models({
-    &sky, &cube, &testCube, &suit, &bar, &lamp, &lamp2, &plant, &player,
-    &beerCan, &beerBottle, &wineBottle, &beers, &bottle1, &bottle2, &bottle3, &bottle4, &bottle5
-});
-
 struct Object {
     Model *model;
-    vec3 origin;
-    vec3 scale;
-    vec3 rotation;
+    Program *shader;
+
+    vec3 origin = vec3(0.0);
+    f32 scale = 1.0;
+    f32 rotation = 0.0;
+
     bool visible = true;
     bool selectable = true;
-
-    Object(Model *model, vec3 origin, vec3 scale = vec3(1.0), bool selectable = false):
-        model(model), origin(origin), scale(scale), selectable(selectable) {}
-
-    Object(Model *model, vec3 origin, vec3 scale, vec3 rotation):
-        model(model), origin(origin), scale(scale), rotation(rotation) {}
+    bool drinkable = false;
 };
 
+map<string, Program*> shaders;
+map<string, Model*> models;
+vector<Object*> objects;
 
-vector<Object> objects;
-vector<Object> bottles;
+Model sky("res/models/skydome/skydome.obj");
+Model cube("res/models/cube/cube.obj");
 
-i32 heldObject = -1;
-i32 heldBottle = -1;
+Object *heldObject = nullptr;
+//Object *heldBottle = nullptr;
 
 f32 animationAngle = 0;
 f32 clickDelayMax = 1.0;
@@ -170,10 +141,8 @@ void toggleFlying() {
 }
 
 void reloadShaders() {
-    for (Program *x : programs) x->reload();
-    for (Model *x : models) { 
-        x->unload();
-        x->load();
+    for (auto const& [k, v] : shaders) {
+        v->reload();
     }
 }
 
@@ -229,23 +198,18 @@ void onUpdate(f32 dt) {
             camera.offsetRight(-dx);
             camera.offsetFront(-dz);
         }
-        //camera.offsetUp(dy);
+
         if (flyingEnabled) playerHeight += dy;
         camera.pos.y = playerHeight;
 
-
-        f32 dwh = mouseWheel - lastMouseWheel;
+        f32 deltaWheel = mouseWheel - lastMouseWheel;
         lastMouseWheel = mouseWheel;
 
-        if (heldObject != -1) {
-            Object &x = objects[heldObject];
-            //x.origin += camera.front * vec3(1, 0, 1) * dz;
-            //x.origin += camera.right * drx;
-            //x.origin += camera.up * dy;
+        if (heldObject && flyingEnabled) {
+            Object &x = *heldObject;
             x.origin = camera.pos + camera.front * vec3(10);
-            x.rotation.y = camera.rot.y + PI;
-            x.scale += vec3(dwh / 10.0);
-            //x.origin -= vec3(0, 5, 0);
+            x.rotation = camera.rot.y + PI;
+            x.scale += deltaWheel / 10.0;
         }
     }
 
@@ -264,50 +228,40 @@ bool drinking = false;
 void onDraw(f32 dt) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-
     {
-        Program &prog = skyShader;
-        glUseProgram(prog.id);
+        Program &shader = *shaders["sky"];
+        glUseProgram(shader.id);
         mat4 M(1.0);
         M = translate(M, camera.pos + vec3(0, -50, 0));
         M = scale(M, vec3(300));
 
         glDepthMask(false);
-        glUniformMatrix4fv(prog.u("PVM"), 1, false, value_ptr(P*V*M));
-        sky.draw(prog);
+        glUniformMatrix4fv(shader.u("PVM"), 1, false, value_ptr(P*V*M));
+        sky.draw(shader);
         glDepthMask(true);
 
         M = mat4(1.0);
         M = translate(M, vec3(0, -100, 0));
         M = scale(M, vec3(500, 1, 500));
 
-        glUniformMatrix4fv(prog.u("PVM"), 1, false, value_ptr(P*V*M));
-        cube.draw(prog);
+        glUniformMatrix4fv(shader.u("PVM"), 1, false, value_ptr(P*V*M));
+        cube.draw(shader);
     }
-
-    Program &prog = flatShader;
-    glUseProgram(prog.id);
-    glUniformMatrix4fv(prog.u("P"), 1, false, value_ptr(P));
-    glUniformMatrix4fv(prog.u("V"), 1, false, value_ptr(V));
-    glUniformMatrix4fv(prog.u("E"), 1, false, value_ptr(camera.pos));
 
     {
         mat4 M(1.0);
         M = scale(M, vec3(62, 50, 58));
 
-        glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
-        cube.draw(prog);
+        Program &shader = *shaders["phong+mat"];
+        glUseProgram(shader.id);
+        glUniformMatrix4fv(shader.u("P"), 1, false, value_ptr(P));
+        glUniformMatrix4fv(shader.u("V"), 1, false, value_ptr(V));
+        glUniformMatrix4fv(shader.u("E"), 1, false, value_ptr(camera.pos));
+        glUniformMatrix4fv(shader.u("M"), 1, false, value_ptr(M));
+        cube.draw(shader);
     }
 
-    {
-        mat4 M(1.0);
-        M = translate(M, vec3(0, 0, 0));
-        M = scale(M, vec3(3));
-
-        glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
-        bar.draw(prog);
-    }
-
+    /*
     for (i32 i = 0; i < (i32) bottles.size(); i++) {
         if (heldBottle == i) continue;
 
@@ -337,16 +291,73 @@ void onDraw(f32 dt) {
         glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
         model.draw(prog);
     }
+    */
 
-    if (heldBottle != -1) {
-        Object &object = bottles[heldBottle];
+
+    for (i32 i = 0; i < (i32) objects.size(); i++) {
+        if (objects[i] == heldObject) continue;
+        Object &object = *objects[i];
+        if (!object.visible) continue;
         Model &model = *object.model;
+        Program &shader = *object.shader;
+
+        glUseProgram(shader.id);
+        glUniformMatrix4fv(shader.u("P"), 1, false, value_ptr(P));
+        glUniformMatrix4fv(shader.u("V"), 1, false, value_ptr(V));
+        glUniformMatrix4fv(shader.u("E"), 1, false, value_ptr(camera.pos));
+
+        //dprintf("draw object %i\n", i);
 
         mat4 M(1.0);
-        M = translate(M, camera.pos + camera.front * vec3(1.8, 1, 1.8));
-        M = translate(M, vec3(0, -0.8, 0));
-        M = scale(M, object.scale * 0.5f);
-        M = rotate(M, camera.rot.y + PI, vec3(0, 1, 0));
+        M = translate(M, object.origin);
+        M = rotate(M, object.rotation, vec3(0, 1, 0));
+        M = scale(M, vec3(object.scale));
+
+        if (!heldObject && object.selectable) {
+            vec3 worldMax = M * vec4(model.maxCoords, 1);
+            vec3 worldMin = M * vec4(model.minCoords, 1);
+            bool selected = testAABB(camera.front, worldMin, worldMax) &&
+                length(camera.pos - object.origin) < 15;
+
+            if (selected) {
+                M = scale(M, vec3(1.1));
+
+                if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) heldObject = objects[i];
+
+                if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
+                    dprintf("o: (%.2f %.2f %.2f), s: (%.2f), r: (0 %.2f 0)\n",
+                            object.origin.x, object.origin.y, object.origin.z, object.scale, object.rotation);
+                }
+            }
+        }
+
+        glUniformMatrix4fv(shader.u("M"), 1, false, value_ptr(M));
+        model.draw(shader);
+    }
+
+    if (heldObject) {
+        Object &object = *heldObject;
+        Model &model = *object.model;
+        Program &prog = *object.shader;
+
+        glUseProgram(prog.id);
+        glUniformMatrix4fv(prog.u("P"), 1, false, value_ptr(P));
+        glUniformMatrix4fv(prog.u("V"), 1, false, value_ptr(V));
+        glUniformMatrix4fv(prog.u("E"), 1, false, value_ptr(camera.pos));
+
+        mat4 M(1.0);
+
+        if (drinking || !flyingEnabled) {
+            M = translate(M, camera.pos + camera.front * vec3(1.8, 1, 1.8));
+            M = translate(M, vec3(0, -0.8, 0));
+            M = scale(M, vec3(object.scale) * 0.5f);
+            M = rotate(M, camera.rot.y + PI, vec3(0, 1, 0));
+        } else {
+            M = translate(M, object.origin);
+            M = rotate(M, object.rotation, vec3(0, 1, 0));
+            M = scale(M, vec3(object.scale));
+
+        }
 
         if (drinking) {
             M = rotate(M, animationAngle, vec3(1, 0, 0));
@@ -355,57 +366,23 @@ void onDraw(f32 dt) {
             if (animationAngle > 1) {
                 animationAngle = 0;
                 object.visible = false;
-                heldBottle = -1;
+                heldObject = nullptr;
                 camera.effect1 += 0.05;
                 //dprintf("%.2f%%\n", camera.effect1*100);
                 drinking = false;
             }
-
         } else {
-            M = rotate(M, camera.rot.x, vec3(1, 0, 0));
 
-            if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) {
+            //M = rotate(M, camera.rot.x, vec3(1, 0, 0));
+
+            if (!drinking && didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) {
+                heldObject = nullptr;
+            }
+
+            if (didClick(dt, GLFW_MOUSE_BUTTON_RIGHT)) {
                 drinking = true;
             }
-            if (didClick(dt, GLFW_MOUSE_BUTTON_RIGHT)) {
-                heldBottle = -1;
-            }
 
-        }
-
-        glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
-        model.draw(prog);
-    }
-
-    for (i32 i = 0; i < (i32) objects.size(); i++) {
-        Object &object = objects[i];
-        if (!object.visible) continue;
-        Model &model = *object.model;
-        //dprintf("draw object %i\n", i);
-
-        mat4 M(1.0);
-        M = translate(M, object.origin);
-        M = rotate(M, object.rotation.y, vec3(0, 1, 0));
-        M = scale(M, object.scale);
-
-        if (object.selectable) {
-            if (heldObject == -1) {
-                vec3 worldMax = M * vec4(model.maxCoords, 1);
-                vec3 worldMin = M * vec4(model.minCoords, 1);
-                bool selected = testAABB(camera.front, worldMin, worldMax);
-                if (selected) {
-                    M = scale(M, vec3(1.1));
-
-                    if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) heldObject = i;
-
-                    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
-                        dprintf("o: (%.2f %.2f %.2f), s: (%.2f), r: (0 %.2f 0)\n",
-                                object.origin.x, object.origin.y, object.origin.z, object.scale.x, object.rotation.y);
-                    }
-                }
-            } else {
-                if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) heldObject = -1;
-            }
         }
 
         glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
@@ -415,46 +392,129 @@ void onDraw(f32 dt) {
     glfwSwapBuffers(window);
 }
 
+using nlohmann::json;
+using std::cerr;
+#include <fstream>
+#include <iomanip>
+#include <sstream>
+
+string encodeFloat(f32 x) {
+    std::ostringstream s;
+    s << std::fixed << std::setprecision(2) << x;
+    return s.str();
+}
+
+f32 decodeFloat(json x) {
+    return std::stof(x.get<string>());
+}
+
+vector<string> encodeVec3(vec3 x) {
+    //return vector<i32>({ (i32) (x.x*PREC), (i32) (x.y * PREC), (i32) (x.z * PREC) });
+    return {encodeFloat(x.x), encodeFloat(x.y), encodeFloat(x.z)};
+}
+
+vec3 decodeVec3(json x) {
+    //return vec3((f32) x[0] / PREC, (f32) x[1] / PREC, (f32) x[2] / PREC);
+    return vec3(decodeFloat(x[0]), decodeFloat(x[1]), decodeFloat(x[2]));
+}
+
+
+void saveScene(const string &path) {
+    dprintf("saving scene to %s\n", path.c_str());
+
+    json j;
+
+    for (auto& [k, v] : shaders) {
+        j["shaders"][k]["vs"] = v->vs;
+        j["shaders"][k]["fs"] = v->fs;
+    }
+
+    for (auto& [k, v] : models) {
+        j["models"][k] = v->path;
+    }
+
+    for (auto& x : objects) {
+        json o;
+        o["model"] = x->model->key;
+        o["shader"] = x->shader->key;
+        o["origin"] = encodeVec3(x->origin);
+        o["scale"] = encodeFloat(x->scale);
+        o["rotation"] = encodeFloat(x->rotation);
+        o["selectable"] = x->selectable;
+        o["drinkable"] = x->drinkable;
+        j["objects"].push_back(o);
+    }
+
+    std::ofstream file(path);
+    file.precision(4);
+    file << std::setw(4) << j << endl;
+}
+
+void loadScene(const string &path) {
+    dprintf("loading scene from %s\n", path.c_str());
+
+    std::ifstream file(path);
+    json j;
+    file >> j;
+
+    for (auto& [k, v] : j["shaders"].items()) {
+        Program *x = new Program(v["vs"], v["fs"]);
+        x->key = k;
+        shaders.insert({k, x});
+    }
+
+    for (auto& [k, v] : j["models"].items()) {
+        Model *x = new Model(v);
+        x->key = k;
+        models.insert({k, x});
+    }
+
+    for (auto& v : j["objects"]) {
+        Object *x = new Object;
+
+        x->shader = shaders[v["shader"]];
+        x->model = models[v["model"]];
+        x->origin = decodeVec3(v["origin"]);
+
+        if (v.count("rotation") == 1) x->rotation = decodeFloat(v["rotation"]);
+        if (v.count("scale") == 1) x->scale = decodeFloat(v["scale"]);
+
+        if (v.count("selectable") == 1) x->selectable = v["selectable"].get<bool>();
+        if (v.count("drinkable") == 1) x->drinkable = v["drinkable"].get<bool>();
+
+        objects.push_back(x);
+    }
+}
+
 void onInit() {
     glClearColor(1.0, 1.0, 1.0, 0.0);
     glEnable(GL_DEPTH_TEST);
-    //glEnable(GL_CULL_FACE);
+    //glEnable(GL_CULL);
 
-    for (Program *x : programs) x->load();
-    for (Model *x : models) x->load();
+    loadScene("res/scenes/bar.json");
 
-    objects.push_back(Object(&lamp, vec3(25.0, 1.50, -22.5), vec3(1.40)));
-    objects.push_back(Object(&lamp, vec3(-16.0, 1.50, -22.5), vec3(1.40)));
+    for (auto const& [k, v] : shaders) v->load();
+    for (auto const& [k, v] : models) v->load();
 
-    objects.push_back(Object(&suit, vec3(-24, 1.5, -19.0), vec3(1), vec3(0, 0.43, 0)));
-    
-    objects.push_back(Object(&lamp2, vec3(11.73, 15, 14.24), vec3(7.5), vec3(0, -1.34, 0)));
-    objects.push_back(Object(&lamp2, vec3(-14.55, 15, 14.17), vec3(7.5), vec3(0, 2.63, 0)));
-    objects.push_back(Object(&plant, vec3(27.35, 1.5, 25.3), vec3(1.6), false));
-
-    objects.push_back(Object(&beers, vec3(11.0, 7.6, 13.6), vec3(5.5), vec3(0, 3.6, 0)));
-
-    bottles.push_back(Object(&bottle3, vec3(10, 8, -8), vec3(0.3), vec3(0)));
-    bottles.push_back(Object(&bottle2, vec3(12, 8, -10), vec3(0.3), vec3(0, -0.41, 0)));
-    bottles.push_back(Object(&bottle5, vec3(9.8, 9.12, -10), vec3(0.7), vec3(0, -0.64, 0)));
-
-    for (int i = 0; i < 5; i++) {
-        bottles.push_back(Object(&beerBottle, vec3(-8+i, 8, -7), vec3(10)));
-    }
-
-    for (int i = 0; i < 5; i++) {
-        bottles.push_back(Object(&beerCan, vec3(-3+i, 8, -7), vec3(1.0)));
-    }
-
-    for (int i = 0; i < 5; i++) {
-        bottles.push_back(Object(&wineBottle, vec3(2+i, 8, -7), vec3(0.01)));
-    }
+    sky.load();
+    cube.load();
 
     glBindVertexArray(0);
 }
 
 void onExit() {
-    for (Model *x : models) x->unload();
+    for (auto& [k, v] : models) {
+        v->unload();
+        delete v;
+    }
+
+    for (auto& [k, v] : shaders) {
+        v->unload();
+        delete v;
+    }
+
+    sky.unload();
+    cube.unload();
 }
 
 void onResize(Window *window, i32 width, i32 height) {
@@ -485,8 +545,10 @@ void onKeyboard(Window *window, i32 key, i32 code, i32 action, i32 mods) {
         if (key == GLFW_KEY_M) toggleFlying();
         if (key == GLFW_KEY_R) reloadShaders();
         if (key == GLFW_KEY_P) dprintf("pos: (%.2f %.2f %.2f)\n", camera.pos.x, camera.pos.y, camera.pos.z);
+        if (key == GLFW_KEY_J) saveScene("res/scenes/bar.json");
         if (key == GLFW_KEY_O) {
         }
+
     }
 }
 
