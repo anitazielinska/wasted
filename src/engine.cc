@@ -291,6 +291,13 @@ void Mesh::bindTexture(Program &shader) {
         glBindTexture(GL_TEXTURE_2D, tex.id);
         glUniform1i(shader.u(var.c_str()), i);
     }
+
+    i32 textured = mat.textures.size() > 0 ? 1 : 0;
+    glUniform1i(shader.u("isTextured"), textured);
+    glUniform3fv(shader.u("mat.ambient"), 1, value_ptr(mat.ambient));
+    glUniform3fv(shader.u("mat.diffuse"), 1, value_ptr(mat.diffuse));
+    glUniform3fv(shader.u("mat.specular"), 1, value_ptr(mat.specular));
+    glUniform1f(shader.u("mat.shine"), mat.specularScale);
 }
 
 void Mesh::draw(Program &shader) {

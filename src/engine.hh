@@ -58,7 +58,7 @@ struct Texture {
 struct Material {
     string name;
     vec3 diffuse, specular, ambient, emissive, transparent;
-    f32 shininess, opacity, specularScale;
+    f32 shininess, opacity, specularScale = 32;
     bool backfaceCulling;
     vector<u32> textures;
 };

@@ -34,33 +34,79 @@ u32 KEY_FLY_D = GLFW_KEY_LEFT_SHIFT;
 
 Camera camera(vec3(4, 14, 23), vec3(-0.15, -PI, 0));
 
+Program flatShader("res/shaders/flat_v.glsl", "res/shaders/flat_f.glsl");
+Program matShader("res/shaders/mat_v.glsl", "res/shaders/mat_f.glsl");
+Program skyShader("res/shaders/sky_v.glsl", "res/shaders/sky_f.glsl");
+
 Model sky("res/models/skydome/skydome.obj");
+Model suit("res/models/nanosuit/nanosuit.obj");
 Model cube("res/models/cube/cube.obj");
 Model testCube("res/models/cube/cube.obj");
-Model beer("res/models/poly/Beer.obj");
-Model bar("res/models/bar/Bar.obj");
 
-f32 animationAngle = 0;
+Model bar("res/models/poly/Bar.obj");
+Model player("res/models/poly/player.obj");
+Model plant("res/models/poly/plant.obj");
+Model lamp("res/models/poly/Standing_lamp_01.obj");
+Model lamp2("res/models/poly/lantern.obj");
 
-Program flatShader("res/shaders/flat_v.glsl", "res/shaders/flat_f.glsl");
-Program phongShader("res/shaders/phong_v.glsl", "res/shaders/phong_f.glsl");
+Model beer("res/models/poly/beer.obj");
+Model beers("res/models/poly/beer_flight.obj");
+Model bottle1("res/models/poly/bottle1.obj");
+Model bottle2("res/models/poly/bottle2.obj");
+Model bottle3("res/models/poly/bottle3.obj");
+Model bottle4("res/models/poly/bottle4.obj");
+Model bottle5("res/models/poly/bottle5.obj");
 
-struct Bottle {
+vector<Program*> programs({
+    &flatShader, &matShader, &skyShader
+});
+
+vector<Model*> models({
+    &sky, &cube, &testCube, &suit, &bar, &lamp, &lamp2, &plant, &player,
+    &beer, &beers, &bottle1, &bottle2, &bottle3, &bottle4, &bottle5
+});
+
+struct Object {
     Model *model;
     vec3 origin;
-    bool shouldDraw = true;
+    vec3 scale;
+    vec3 rotation;
+    bool visible = true;
+    bool selectable = false;
 
-    Bottle(Model *model, vec3 origin):
-        model(model), origin(origin) {}
+    Object(Model *model, vec3 origin, vec3 scale = vec3(1.0), bool selectable = false):
+        model(model), origin(origin), scale(scale), selectable(selectable) {}
 };
 
-vector<Bottle> bottles;
+vector<Object> objects;
+vector<Object> bottles;
+
+i32 heldObject = -1;
 i32 heldBottle = -1;
 
-mat4 P, V, M;
+f32 animationAngle = 0;
+f32 clickDelayMax = 1.0;
+f32 clickDelay = clickDelayMax;
+
+mat4 P, V;
 f32 FoV;
 
 // ----------------------------------------------------------------------------
+
+
+bool didClick(f32 dt, u32 button) {
+    if (clickDelay > 0) {
+        clickDelay -= dt;
+        return false;
+    }
+
+    if (GLFW_PRESS == glfwGetMouseButton(window, button)) {
+        clickDelay = clickDelayMax;
+        return true;
+    }
+    
+    return false;
+}
 
 void centerMouse() {
     if (mouseLocked) {
@@ -117,19 +163,23 @@ void toggleFlying() {
 }
 
 void reloadShaders() {
-    flatShader.reload();
-    phongShader.reload();
+    for (Program *x : programs) x->reload();
+    for (Model *x : models) { 
+        x->unload();
+        x->load();
+    }
 }
+
+f32 lastMouseWheel = mouseWheel;
 
 void onUpdate(f32 dt) {
     f64 xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
     centerMouse();
 
+    f32 drx = mouseSpeed * (windowHeight / 2.0 - ypos);
+    f32 dry = mouseSpeed * (windowWidth / 2.0 - xpos);
     if (mouseLocked) {
-        f64 drx = mouseSpeed * (windowHeight / 2.0 - ypos);
-        f64 dry = mouseSpeed * (windowWidth / 2.0 - xpos);
-
         if (abs(mouseRX + drx) < mouseLimitRX) {
             mouseRX += drx;
             camera.offsetPitch(drx);
@@ -152,105 +202,192 @@ void onUpdate(f32 dt) {
         //camera.offsetUp(dy);
         if (flyingEnabled) playerHeight += dy;
         camera.pos.y = playerHeight;
+
+
+        f32 dwh = mouseWheel - lastMouseWheel;
+        lastMouseWheel = mouseWheel;
+
+        if (heldObject != -1) {
+            Object &x = objects[heldObject];
+            //x.origin += camera.front * vec3(1, 0, 1) * dz;
+            //x.origin += camera.right * drx;
+            //x.origin += camera.up * dy;
+            x.origin = camera.pos + camera.front * vec3(10);
+            x.rotation.y = camera.rot.y + PI;
+            x.scale += vec3(dwh / 10.0);
+            //x.origin -= vec3(0, 5, 0);
+        }
     }
 
+    clickDelay -= dt;
+
     //dprintf("rot: (%.2f, %.2f,  %.2f)\n", camera.rot.x, camera.rot.y, camera.rot.z);
-    FoV = initialFoV - 5 * mouseWheel;
+    FoV = initialFoV;
     P = perspective(radians(FoV), aspectRatio, 1.0f, 500.0f);
     V = camera.lookAt();
 }
 
 // ----------------------------------------------------------------------------
-void onDraw() {
+
+bool drinking = false;
+
+void onDraw(f32 dt) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glUseProgram(flatShader.id);
-    glUniformMatrix4fv(flatShader.u("P"), 1, false, value_ptr(P));
-    glUniformMatrix4fv(flatShader.u("V"), 1, false, value_ptr(V));
 
     {
+        Program &prog = skyShader;
+        glUseProgram(prog.id);
         mat4 M(1.0);
         M = translate(M, camera.pos + vec3(0, -50, 0));
         M = scale(M, vec3(300));
+
         glDepthMask(false);
-        glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
-        sky.draw(flatShader);
+        glUniformMatrix4fv(prog.u("PVM"), 1, false, value_ptr(P*V*M));
+        sky.draw(prog);
         glDepthMask(true);
+
+        M = mat4(1.0);
+        M = translate(M, vec3(0, -100, 0));
+        M = scale(M, vec3(500, 1, 500));
+
+        glUniformMatrix4fv(prog.u("PVM"), 1, false, value_ptr(P*V*M));
+        cube.draw(prog);
     }
 
-    glUseProgram(flatShader.id);
-    glUniformMatrix4fv(flatShader.u("P"), 1, false, value_ptr(P));
-    glUniformMatrix4fv(flatShader.u("V"), 1, false, value_ptr(V));
-    //glUniform3fv(phongShader.u("ep"), 1, value_ptr(camera.pos));
+    Program &prog = flatShader;
+    glUseProgram(prog.id);
+    glUniformMatrix4fv(prog.u("P"), 1, false, value_ptr(P));
+    glUniformMatrix4fv(prog.u("V"), 1, false, value_ptr(V));
+    glUniformMatrix4fv(prog.u("E"), 1, false, value_ptr(camera.pos));
 
     {
         mat4 M(1.0);
         M = scale(M, vec3(62, 50, 58));
-        M = translate(M, vec3(0, 0, 0));
 
-        glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
-        cube.draw(flatShader);
+        glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
+        cube.draw(prog);
     }
 
     {
         mat4 M(1.0);
         M = translate(M, vec3(0, 0, 0));
         M = scale(M, vec3(3));
-        glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
-        bar.draw(flatShader);
+
+        glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
+        bar.draw(prog);
     }
 
-    for (int i = 0; i < bottles.size(); i++) {
+    for (i32 i = 0; i < (i32) bottles.size(); i++) {
         if (heldBottle == i) continue;
 
-        Bottle &bottle = bottles[i];
+        Object &bottle = bottles[i];
         Model &model = *bottle.model;
 
-        if (!bottle.shouldDraw) continue;
+        if (!bottle.visible) continue;
 
         mat4 M(1.0);
         M = translate(M, bottle.origin);
 
         vec3 worldMax = M * vec4(model.maxCoords, 1);
         vec3 worldMin = M * vec4(model.minCoords, 1);
-        bool selected = testAABB(camera.front, worldMin, worldMax);
+        bool selected = testAABB(camera.front, worldMin, worldMax) &&
+            glm::length(camera.pos - bottle.origin) < 15;
 
-        if (selected) {
+        if (selected && heldBottle == -1) {
             M = scale(M, vec3(1.1));
 
-            if (heldBottle == -1 && GLFW_PRESS == glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT)) {
+
+            if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) {
                 heldBottle = i;
             }
         }
 
-        glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
-        model.draw(flatShader);
+        glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
+        model.draw(prog);
     }
 
     if (heldBottle != -1) {
-        Bottle &bottle = bottles[heldBottle];
+        Object &bottle = bottles[heldBottle];
         Model &model = *bottle.model;
 
-        mat4 M(1.0);
-        M = translate(M, camera.pos + camera.front * vec3(1.8, 1, 1.8));
-        M = translate(M, vec3(0, -0.8, 0));
-        M = scale(M, vec3(0.5));
+        if (drinking) {
 
-        f32 a = camera.rot.y + PI;
-        M = rotate(M, a, vec3(0, 1, 0));
-        M = rotate(M, animationAngle, vec3(1, 0, 0));
+            mat4 M(1.0);
+            M = translate(M, camera.pos + camera.front * vec3(1.8, 1, 1.8));
+            M = translate(M, vec3(0, -0.8, 0));
+            M = scale(M, vec3(0.5));
+            M = rotate(M, camera.rot.y + PI, vec3(0, 1, 0));
+            M = rotate(M, animationAngle, vec3(1, 0, 0));
 
-        glUniformMatrix4fv(flatShader.u("M"), 1, false, value_ptr(M));
-        model.draw(flatShader);
+            glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
+            model.draw(prog);
 
-        animationAngle += 0.008;
-        if (animationAngle > 1) {
-            bottle.shouldDraw = false;
-            heldBottle = -1;
-            animationAngle = 0;
-            camera.effect1 += 0.05;
-            dprintf("%.2f%\n", camera.effect1*100);
+            animationAngle += 0.008;
+            if (animationAngle > 1) {
+                animationAngle = 0;
+                bottle.visible = false;
+                heldBottle = -1;
+                camera.effect1 += 0.05;
+                //dprintf("%.2f%%\n", camera.effect1*100);
+                drinking = false;
+            }
+
+        } else {
+
+            mat4 M(1.0);
+            //M = translate(M, camera.pos + camera.front * vec3(mouseWheel / 10));
+            M = translate(M, camera.pos + camera.front * vec3(2));
+            M = translate(M, vec3(0, -0.8, 0));
+            M = scale(M, vec3(0.5));
+            M = rotate(M, camera.rot.y + PI, vec3(0, 1, 0));
+            M = rotate(M, camera.rot.x, vec3(1, 0, 0));
+            glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
+            model.draw(prog);
+
+            if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) {
+                drinking = true;
+            }
+            if (didClick(dt, GLFW_MOUSE_BUTTON_RIGHT)) {
+                heldBottle = -1;
+            }
+
         }
+    }
+
+    for (i32 i = 0; i < (i32) objects.size(); i++) {
+        Object &object = objects[i];
+        if (!object.visible) continue;
+        Model &model = *object.model;
+        //dprintf("draw object %i\n", i);
+
+        mat4 M(1.0);
+        M = translate(M, object.origin);
+        M = rotate(M, object.rotation.y, vec3(0, 1, 0));
+        M = scale(M, object.scale);
+
+        if (object.selectable) {
+            if (heldObject == -1) {
+                vec3 worldMax = M * vec4(model.maxCoords, 1);
+                vec3 worldMin = M * vec4(model.minCoords, 1);
+                bool selected = testAABB(camera.front, worldMin, worldMax);
+                if (selected) {
+                    M = scale(M, vec3(1.1));
+
+                    if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) heldObject = i;
+
+                    if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
+                        dprintf("o: (%.2f %.2f %.2f), s: (%.2f), r: (0 %.2f 0)\n",
+                                object.origin.x, object.origin.y, object.origin.z, object.scale.x, object.rotation.y);
+                    }
+                }
+            } else {
+                if (didClick(dt, GLFW_MOUSE_BUTTON_LEFT)) heldObject = -1;
+            }
+        }
+
+        glUniformMatrix4fv(prog.u("M"), 1, false, value_ptr(M));
+        model.draw(prog);
     }
 
     glfwSwapBuffers(window);
@@ -261,27 +398,37 @@ void onInit() {
     glEnable(GL_DEPTH_TEST);
     //glEnable(GL_CULL_FACE);
 
-    reloadShaders();
+    for (Program *x : programs) x->load();
+    for (Model *x : models) x->load();
 
-    sky.load();
-    cube.load();
-    testCube.load();
-    beer.load();
-    bar.load();
-
-    for (int i = 0; i < 10; i++) {
-        bottles.push_back(Bottle(&beer, vec3(-8+i, 8, -7)));
+    for (i32 i = 0; i < 10; i++) {
+        bottles.push_back(Object(&beer, vec3(-8+i, 8, -7)));
     }
+
+    objects.push_back(Object(&lamp, vec3(25.0, 1.50, -22.5), vec3(1.40)));
+    objects.push_back(Object(&lamp, vec3(-16.0, 1.50, -22.5), vec3(1.40)));
+
+    Object oSuit(&suit, vec3(-24, 1.5, -19.0), vec3(1), false);
+    oSuit.rotation.y = 0.43;
+    objects.push_back(oSuit);
+    
+    objects.push_back(Object(&lamp2, vec3(0), vec3(10), true));
+    objects.push_back(Object(&plant, vec3(27.35, 1.5, 25.3), vec3(1.6), false));
+
+
+    objects.push_back(Object(&player, vec3(0), vec3(10), true));
+    objects.push_back(Object(&beers, vec3(0), vec3(5.5), true));
+    //objects.push_back(Object(&bottle1, vec3(0), vec3(1), true));
+    objects.push_back(Object(&bottle2, vec3(0), vec3(1), true));
+    objects.push_back(Object(&bottle3, vec3(0), vec3(1), true));
+    //objects.push_back(Object(&bottle4, vec3(0), vec3(1), true));
+    objects.push_back(Object(&bottle5, vec3(0), vec3(1), true));
 
     glBindVertexArray(0);
 }
 
 void onExit() {
-    flatShader.unload();
-    phongShader.unload();
-    sky.unload();
-    beer.unload();
-    testCube.unload();
+    for (Model *x : models) x->unload();
 }
 
 void onResize(Window *window, i32 width, i32 height) {
@@ -300,8 +447,9 @@ void onMouseClick(Window *window, i32 button, i32 action, i32 mods) {
     if (action == GLFW_PRESS) {
         f64 x, y;
         glfwGetCursorPos(window, &x, &y);
-        if (button == GLFW_MOUSE_BUTTON_LEFT)
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
             if (!mouseLocked) lockMouse();
+        }
     }
 }
 
@@ -310,6 +458,9 @@ void onKeyboard(Window *window, i32 key, i32 code, i32 action, i32 mods) {
         if (key == GLFW_KEY_ESCAPE) unlockMouse();
         if (key == GLFW_KEY_M) toggleFlying();
         if (key == GLFW_KEY_R) reloadShaders();
+        if (key == GLFW_KEY_P) dprintf("pos: (%.2f %.2f %.2f)\n", camera.pos.x, camera.pos.y, camera.pos.z);
+        if (key == GLFW_KEY_O) {
+        }
     }
 }
 
@@ -346,7 +497,7 @@ int main(void) {
         f32 dt = glfwGetTime();
         glfwSetTime(0);
         onUpdate(dt);
-        onDraw();
+        onDraw(dt);
         glfwPollEvents();
     }
 
