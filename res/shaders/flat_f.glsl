@@ -44,8 +44,9 @@ void main() {
     lights[0] = vec3(25.0, 14.00, -22.5);
     lights[1] = vec3(-16.0, 14.00, -22.5);
 
-    lights[2] = vec3(12.08, 14.00, 15.27);
-    lights[3] = vec3(-14.48, 14.00, 14.22);
+    lights[2] = vec3(11.73, 15, 14.24);
+    lights[3] = vec3(-14.55, 15, 14.17);
+
     lights[4] = vec3(2.97, 22, -20.96);
 
     vec3 diffuseColor = mat.diffuse;

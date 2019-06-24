@@ -75,10 +75,13 @@ struct Object {
     vec3 scale;
     vec3 rotation;
     bool visible = true;
-    bool selectable = false;
+    bool selectable = true;
 
     Object(Model *model, vec3 origin, vec3 scale = vec3(1.0), bool selectable = false):
         model(model), origin(origin), scale(scale), selectable(selectable) {}
+
+    Object(Model *model, vec3 origin, vec3 scale, vec3 rotation):
+        model(model), origin(origin), scale(scale), rotation(rotation) {}
 };
 
 
@@ -175,23 +178,23 @@ void reloadShaders() {
 }
 
 bool checkBoundaries(f32 x1, f32 x2, f32 z1, f32 z2){
-    if (camera.pos.x > x1 and camera.pos.x < x2 and camera.pos.z > z1 and camera.pos.z < z2) return true;
-    return false;
+    return camera.pos.x > x1 && camera.pos.x < x2
+        && camera.pos.z > z1 && camera.pos.z < z2;
 }
 
 
 bool collisionDetection(){
-    if (camera.pos.x > 28 or camera.pos.x < -29 or
-        camera.pos.z > 27 or camera.pos.z < -21 or
-        checkBoundaries(-13, 21.5, -26, -4) or
-        checkBoundaries(-10, 18.5, -4, 0) or
-        checkBoundaries(-26.5, -4, 11.5, 18.5) or
-        checkBoundaries(-20, -13.5, 4, 26) or
-        checkBoundaries(1, 23.5, 10, 19) or
-        checkBoundaries(8.5, 15, 3.5, 25) or
-        checkBoundaries(-20, -8, 13.5, 20.5) or
-        checkBoundaries(6.5, 18.5, 11.5, 21)) return true;
-    return false;
+    if (flyingEnabled) return false;
+    return  camera.pos.x > 28 || camera.pos.x < -29 
+        || camera.pos.z > 27 || camera.pos.z < -21 
+        || checkBoundaries(-13, 21.5, -26, -4) 
+        || checkBoundaries(-10, 18.5, -4, 0) 
+        || checkBoundaries(-26.5, -4, 11.5, 18.5) 
+        || checkBoundaries(-20, -13.5, 4, 26) 
+        || checkBoundaries(1, 23.5, 10, 19) 
+        || checkBoundaries(8.5, 15, 3.5, 25) 
+        || checkBoundaries(-20, -8, 13.5, 20.5) 
+        || checkBoundaries(6.5, 18.5, 11.5, 21);
 }
 
 void onUpdate(f32 dt) {
@@ -423,20 +426,17 @@ void onInit() {
     objects.push_back(Object(&lamp, vec3(25.0, 1.50, -22.5), vec3(1.40)));
     objects.push_back(Object(&lamp, vec3(-16.0, 1.50, -22.5), vec3(1.40)));
 
-    Object oSuit(&suit, vec3(-24, 1.5, -19.0), vec3(1), false);
-    oSuit.rotation.y = 0.43;
-    objects.push_back(oSuit);
+    objects.push_back(Object(&suit, vec3(-24, 1.5, -19.0), vec3(1), vec3(0, 0.43, 0)));
     
-    objects.push_back(Object(&lamp2, vec3(0), vec3(10), true));
+    objects.push_back(Object(&lamp2, vec3(11.73, 15, 14.24), vec3(7.5), vec3(0, -1.34, 0)));
+    objects.push_back(Object(&lamp2, vec3(-14.55, 15, 14.17), vec3(7.5), vec3(0, 2.63, 0)));
     objects.push_back(Object(&plant, vec3(27.35, 1.5, 25.3), vec3(1.6), false));
 
-    objects.push_back(Object(&player, vec3(0), vec3(10), true));
-    objects.push_back(Object(&beers, vec3(0), vec3(5.5), true));
-    //objects.push_back(Object(&bottle1, vec3(0), vec3(1), true));
-    objects.push_back(Object(&bottle2, vec3(0), vec3(1), true));
-    objects.push_back(Object(&bottle3, vec3(0), vec3(1), true));
-    //objects.push_back(Object(&bottle4, vec3(0), vec3(1), true));
-    objects.push_back(Object(&bottle5, vec3(0), vec3(1), true));
+    objects.push_back(Object(&beers, vec3(11.0, 7.6, 13.6), vec3(5.5), vec3(0, 3.6, 0)));
+
+    bottles.push_back(Object(&bottle3, vec3(10, 8, -8), vec3(0.3), vec3(0)));
+    bottles.push_back(Object(&bottle2, vec3(12, 8, -10), vec3(0.3), vec3(0, -0.41, 0)));
+    bottles.push_back(Object(&bottle5, vec3(9.8, 9.12, -10), vec3(0.7), vec3(0, -0.64, 0)));
 
     for (int i = 0; i < 5; i++) {
         bottles.push_back(Object(&beerBottle, vec3(-8+i, 8, -7), vec3(10)));
