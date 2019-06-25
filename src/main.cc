@@ -30,9 +30,13 @@ f32 lastMouseWheel = mouseWheel;
 f64 mouseRX = 0.0;
 f64 mouseLimitRX = 1.4;
 
-f32 animationAngle = 0;
 f32 clickDelayMax = 1.0;
 f32 clickDelay = clickDelayMax;
+
+f32 drunk = 0.0; // [0, 1]
+f32 bottleAnim = 0.0;
+f32 camAnim = 0.0;
+f32 suitAnim = 0.0;
 
 f32 playerHeight = 14;
 
@@ -114,9 +118,6 @@ bool collisionDetection(){
         || checkBoundaries(6.5, 18.5, 11.5, 21);
 }
 
-f32 camAnim = 0.0;
-f32 drunk = 0.0; // [0, 1]
-
 void onUpdate(f32 dt) {
     f64 xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
@@ -176,16 +177,10 @@ void onUpdate(f32 dt) {
 
     clickDelay -= dt;
 
-    //dprintf("rot: (%.2f, %.2f,  %.2f)\n", camera.rot.x, camera.rot.y, camera.rot.z);
-
-
-
-    //camera.offsetPitch((sin(camAnim)) * 0.01);
-    //camera.offsetYaw((sin(camAnim)) * 0.01);
-
     f32 pulse = drunk * 10 * sin(camAnim);
     vec3 swirl = drunk * 0.1f * vec3(sin(camAnim));
     camAnim += dt;
+	suitAnim += dt * 0.1;
 
     P = perspective(radians(FoV + pulse), aspectRatio, 1.0f, 500.0f);
     V = lookAt(camera.pos, camera.pos + camera.front + swirl, camera.up);
@@ -235,6 +230,11 @@ void onDraw(f32 dt) {
         if (!object.visible) continue;
         Model &model = *object.model;
         Program &shader = *object.shader;
+
+		if (drunk >= 1.0 && model.key == "suit") {
+			vec3 dir = camera.pos - object.origin;
+			object.rotation = atan(dir.x, dir.z);
+		}
 
         mat4 M(1.0);
         M = translate(M, object.origin);
@@ -292,11 +292,11 @@ void onDraw(f32 dt) {
         }
 
         if (drinking) {
-            M = rotate(M, animationAngle, vec3(1, 0, 0));
+            M = rotate(M, bottleAnim, vec3(1, 0, 0));
 
-            animationAngle += 0.008;
-            if (animationAngle > 1) {
-                animationAngle = 0;
+            bottleAnim += 0.008;
+            if (bottleAnim > 1) {
+                bottleAnim = 0;
                 object.visible = false;
                 heldObject = nullptr;
                 drinking = false;

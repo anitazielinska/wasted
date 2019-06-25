@@ -13,7 +13,6 @@ using nlohmann::json;
 // -----------------------------------------------
 
 void Camera::update() {
-    f32 zFront = effect1 * sin(rot.x) * sin(rot.y);
     front = vec3(
             cos(rot.x) * sin(rot.y),
             sin(rot.x),
